@@ -84,8 +84,8 @@ var DAYS = [
 
 var DATA_KEY = "cargas-dados-v2";
 var OLD_DATA_KEY = "hipertrofia-pesos-v1";
-var PROFILE_KEY = "cargas-perfil-v1";
-var DEFAULT_PROFILE = { height:"1,77 m", start:"62 kg", goal:"75 kg" };
+var PROFILE_KEY = "cargas-perfil-v2";
+var DEFAULT_PROFILE = { name:"" };
 
 function todayLabel(){
   var d = new Date();
@@ -123,6 +123,26 @@ function loadInitialData(){
     }
   } catch(e) {}
   return {};
+}
+
+var EXERCISES_KEY = "cargas-exercicios-v1";
+
+function loadExerciseOverrides(){
+  try {
+    var raw = localStorage.getItem(EXERCISES_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return {};
+}
+
+// Aplica as personalizações (nome / principal) salvas por cima da lista padrão de exercícios.
+function applyOverrides(day, overrides){
+  var dayOverrides = overrides[day.key] || {};
+  return day.exercises.map(function(ex){
+    var ov = dayOverrides[ex.id];
+    if (!ov) return ex;
+    return Object.assign({}, ex, ov);
+  });
 }
 
 function loadProfile(){
@@ -167,9 +187,10 @@ function CargaTracker(){
   var saveStateState = useState("idle"); var saveState = saveStateState[0], setSaveState = saveStateState[1];
   var openHistoryState = useState(null); var openHistory = openHistoryState[0], setOpenHistory = openHistoryState[1];
   var showSummaryState = useState(false); var showSummary = showSummaryState[0], setShowSummary = showSummaryState[1];
+  var exOverridesState = useState(loadExerciseOverrides); var exOverrides = exOverridesState[0], setExOverrides = exOverridesState[1];
+  var editModeState = useState(false); var editMode = editModeState[0], setEditMode = editModeState[1];
   var saveTimer = useRef(null);
   var dataRef = useRef(data);
-  var fileInputRef = useRef(null);
 
   useEffect(function(){ dataRef.current = data; }, [data]);
 
@@ -233,38 +254,28 @@ function CargaTracker(){
     });
   };
 
+  var saveExOverrides = function(next){
+    setExOverrides(next);
+    try { localStorage.setItem(EXERCISES_KEY, JSON.stringify(next)); } catch(e) {}
+  };
+
+  var renameExercise = function(dayKey, exId, newName){
+    var dayOv = Object.assign({}, exOverrides[dayKey] || {});
+    dayOv[exId] = Object.assign({}, dayOv[exId] || {}, {name:newName});
+    var next = Object.assign({}, exOverrides); next[dayKey] = dayOv;
+    saveExOverrides(next);
+  };
+
+  var toggleMainExercise = function(dayKey, exId, currentMain){
+    var dayOv = Object.assign({}, exOverrides[dayKey] || {});
+    dayOv[exId] = Object.assign({}, dayOv[exId] || {}, {main: !currentMain});
+    var next = Object.assign({}, exOverrides); next[dayKey] = dayOv;
+    saveExOverrides(next);
+  };
+
   var saveProfile = function(next){
     setProfile(next);
     try { localStorage.setItem(PROFILE_KEY, JSON.stringify(next)); } catch(e) {}
-  };
-
-  var handleExport = function(){
-    var payload = { exportedAt: new Date().toISOString(), profile: profile, data: data };
-    var blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = "cargas-backup-" + todayLabel().replace(/\//g,"-") + ".json";
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  var handleImportFile = function(e){
-    var file = e.target.files && e.target.files[0];
-    if (!file) return;
-    var reader = new FileReader();
-    reader.onload = function(){
-      try {
-        var parsed = JSON.parse(reader.result);
-        if (parsed.data) { setData(parsed.data); persist(parsed.data); }
-        if (parsed.profile) saveProfile(Object.assign({}, DEFAULT_PROFILE, parsed.profile));
-        window.alert("Backup importado com sucesso.");
-      } catch(err) {
-        window.alert("Não consegui ler esse arquivo. Confira se é um backup exportado por este app.");
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
   };
 
   var handleReset = function(){
@@ -274,7 +285,8 @@ function CargaTracker(){
     setSaveState("idle");
   };
 
-  var currentDay = DAYS.filter(function(d){ return d.key === activeDay; })[0];
+  var currentDayBase = DAYS.filter(function(d){ return d.key === activeDay; })[0];
+  var currentDay = Object.assign({}, currentDayBase, {exercises: applyOverrides(currentDayBase, exOverrides)});
 
   var daysRow = h("div", {className:"safe-top", style:{background:INK, padding:"22px 20px 0"}},
     h("div", {style:{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4}},
@@ -289,31 +301,23 @@ function CargaTracker(){
         }, "✎")
     ),
     editingProfile
-      ? h("div", {style:{display:"flex", gap:6, marginBottom:14, flexWrap:"wrap"}},
+      ? h("div", {style:{display:"flex", gap:6, marginBottom:14}},
           h("input", {
-            value: profile.height, "aria-label":"Altura",
-            onChange: function(e){ saveProfile(Object.assign({}, profile, {height:e.target.value})); },
-            style:{flex:"1 1 70px", minWidth:0, background:"#22232B", border:"1px solid #33343D", borderRadius:6, color:"#fff", fontSize:11, padding:"6px 8px"}
-          }),
-          h("input", {
-            value: profile.start, "aria-label":"Peso inicial",
-            onChange: function(e){ saveProfile(Object.assign({}, profile, {start:e.target.value})); },
-            style:{flex:"1 1 70px", minWidth:0, background:"#22232B", border:"1px solid #33343D", borderRadius:6, color:"#fff", fontSize:11, padding:"6px 8px"}
-          }),
-          h("input", {
-            value: profile.goal, "aria-label":"Peso meta",
-            onChange: function(e){ saveProfile(Object.assign({}, profile, {goal:e.target.value})); },
-            style:{flex:"1 1 70px", minWidth:0, background:"#22232B", border:"1px solid #33343D", borderRadius:6, color:"#fff", fontSize:11, padding:"6px 8px"}
+            value: profile.name, "aria-label":"Seu nome", placeholder:"Digite seu nome",
+            autoFocus: true,
+            onChange: function(e){ saveProfile(Object.assign({}, profile, {name:e.target.value})); },
+            onKeyDown: function(e){ if (e.key === "Enter") setEditingProfile(false); },
+            style:{flex:"1 1 auto", minWidth:0, background:"#22232B", border:"1px solid #33343D", borderRadius:6, color:"#fff", fontSize:12, padding:"7px 10px"}
           }),
           h("button", {
             onClick: function(){ setEditingProfile(false); },
-            style:{background:currentDay.color, border:"none", borderRadius:6, color:INK, fontWeight:700, fontSize:11, padding:"6px 10px", cursor:"pointer"}
+            style:{background:currentDay.color, border:"none", borderRadius:6, color:INK, fontWeight:700, fontSize:11, padding:"6px 12px", cursor:"pointer"}
           }, "OK")
         )
       : h("div", {style:{color:"#8D8FA0", fontSize:12, marginBottom:18}},
-          "Treino de hipertrofia · " + profile.height + " · " + profile.start + " → " + profile.goal
+          profile.name ? ("Treino de hipertrofia · " + profile.name) : "Treino de hipertrofia · toque em ✎ para adicionar seu nome"
         ),
-    h("div", {style:{display:"flex", gap:10, overflowX:"auto", paddingBottom:16}},
+    h("div", {style:{display:"flex", gap:10, overflowX:"auto", overflowY:"hidden", paddingTop:8, paddingBottom:20, marginTop:-8}},
       DAYS.map(function(d){
         var active = d.key === activeDay;
         return h("button", {
@@ -349,10 +353,11 @@ function CargaTracker(){
   );
 
   var toolbar = h("div", {style:{display:"flex", gap:8, padding:"12px 14px 0"}},
-    h("button", {onClick:handleExport, style:toolbarBtnStyle}, "⭳ Exportar"),
-    h("button", {onClick:function(){ fileInputRef.current && fileInputRef.current.click(); }, style:toolbarBtnStyle}, "⭱ Importar"),
-    h("button", {onClick:handleReset, style:Object.assign({}, toolbarBtnStyle, {color:"#D64545", borderColor:"#F2C6C6"})}, "Apagar tudo"),
-    h("input", {ref:fileInputRef, type:"file", accept:"application/json", style:{display:"none"}, onChange:handleImportFile})
+    h("button", {
+        onClick: function(){ setEditMode(!editMode); },
+        style: Object.assign({}, toolbarBtnStyle, editMode ? {background:currentDay.color, color:INK, borderColor:currentDay.color} : {})
+      }, editMode ? "✓ Concluir edição" : "✎ Editar exercícios"),
+    h("button", {onClick:handleReset, style:Object.assign({}, toolbarBtnStyle, {color:"#D64545", borderColor:"#F2C6C6"})}, "Apagar tudo")
   );
 
   var list;
@@ -383,13 +388,29 @@ function CargaTracker(){
         return h("div", {key:ex.id, style:{background:"#fff", borderRadius:10, border:"1px solid " + LINE, overflow:"hidden"}},
           h("div", {style:{display:"flex", alignItems:"center", padding:"12px 12px"}},
             h("div", {style:{flex:1, minWidth:0}},
-              h("div", {style:{fontWeight: ex.main?700:500, fontSize:13.5, color:INK, display:"flex", alignItems:"center", gap:6}},
-                ex.main && h("span", {style:{color:"#E8A020", fontSize:12}}, "★"),
-                h("span", null, ex.name)
-              ),
+              editMode
+                ? h("div", {style:{display:"flex", alignItems:"center", gap:8}},
+                    h("button", {
+                        onClick: function(){ toggleMainExercise(currentDay.key, ex.id, ex.main); },
+                        "aria-label": ex.main ? "Remover como principal" : "Marcar como principal",
+                        style:{background:"none", border:"none", cursor:"pointer", fontSize:16,
+                          color: ex.main ? "#E8A020" : "#C9CBD6", padding:0, lineHeight:1, flexShrink:0}
+                      }, ex.main ? "★" : "☆"),
+                    h("input", {
+                      type:"text", value: ex.name,
+                      "aria-label": "Nome do exercício",
+                      onChange: function(e){ renameExercise(currentDay.key, ex.id, e.target.value); },
+                      style:{flex:1, minWidth:0, fontSize:13.5, fontWeight:500, color:INK,
+                        border:"1px solid " + LINE, borderRadius:6, padding:"6px 8px"}
+                    })
+                  )
+                : h("div", {style:{fontWeight: ex.main?700:500, fontSize:13.5, color:INK, display:"flex", alignItems:"center", gap:6}},
+                    ex.main && h("span", {style:{color:"#E8A020", fontSize:12}}, "★"),
+                    h("span", null, ex.name)
+                  ),
               h("div", {style:{fontSize:11.5, color:MUTED, marginTop:2}}, ex.reps)
             ),
-            h("div", {style:{display:"flex", alignItems:"center", gap:6}},
+            !editMode && h("div", {style:{display:"flex", alignItems:"center", gap:6}},
               h("input", {
                 type:"number", inputMode:"decimal", step:"0.5", min:"0", placeholder:"—",
                 value: cell.value || "",
@@ -403,7 +424,7 @@ function CargaTracker(){
               h("span", {style:{fontSize:11, color:MUTED, fontWeight:600, width:16}}, "kg")
             )
           ),
-          hasHistory ? h("button", {
+          (hasHistory && !editMode) ? h("button", {
               onClick: function(){ setOpenHistory(isOpen ? null : historyKey); },
               "aria-label": isOpen ? "Fechar histórico" : "Ver histórico",
               style:{width:"100%", background: isOpen?"#FAFAFB":"transparent", border:"none",
