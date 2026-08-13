@@ -21,8 +21,6 @@
   input[type=number]::-webkit-inner-spin-button,
   input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-  .safe-top { padding-top: env(safe-area-inset-top); }
-  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
   button { font-family: inherit; }
 </style>
 </head>
@@ -39,7 +37,7 @@ var useState = React.useState, useEffect = React.useEffect, useRef = React.useRe
 
 var INK = "#14151A", PAPER = "#F4F4F6", LINE = "#E4E5EA", MUTED = "#8A8D98";
 
-var DAYS = [
+var DEFAULT_DAYS = [
   { key:"DIA1", n:"1", title:"PUSH", subtitle:"Peito, Ombro e Tríceps", color:"#FF4B3E", exercises:[
     {id:"supino-reto", name:"Supino reto (barra ou halteres)", reps:"4x8-10", main:true},
     {id:"supino-inclinado-halteres", name:"Supino inclinado com halteres", reps:"3x10-12", main:false},
@@ -81,6 +79,20 @@ var DAYS = [
     {id:"abdomen-prancha", name:"Abdômen (prancha + pernas)", reps:"3x séries", main:false},
   ]},
 ];
+
+var DAYS_KEY = "cargas-treino-dias-v1";
+var DAY_COLOR_PALETTE = ["#FF4B3E","#3E8EFF","#3ECF8E","#B15EFF","#FFB13E","#FF6FA8","#2FB8C4","#8D8FA0"];
+
+function loadDaysList(){
+  try {
+    var raw = localStorage.getItem(DAYS_KEY);
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch(e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_DAYS));
+}
 
 var DATA_KEY = "cargas-dados-v2";
 var OLD_DATA_KEY = "hipertrofia-pesos-v1";
@@ -125,26 +137,6 @@ function loadInitialData(){
   return {};
 }
 
-var EXERCISES_KEY = "cargas-exercicios-v1";
-
-function loadExerciseOverrides(){
-  try {
-    var raw = localStorage.getItem(EXERCISES_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch(e) {}
-  return {};
-}
-
-// Aplica as personalizações (nome / principal) salvas por cima da lista padrão de exercícios.
-function applyOverrides(day, overrides){
-  var dayOverrides = overrides[day.key] || {};
-  return day.exercises.map(function(ex){
-    var ov = dayOverrides[ex.id];
-    if (!ov) return ex;
-    return Object.assign({}, ex, ov);
-  });
-}
-
 function loadProfile(){
   try {
     var raw = localStorage.getItem(PROFILE_KEY);
@@ -187,8 +179,12 @@ function CargaTracker(){
   var saveStateState = useState("idle"); var saveState = saveStateState[0], setSaveState = saveStateState[1];
   var openHistoryState = useState(null); var openHistory = openHistoryState[0], setOpenHistory = openHistoryState[1];
   var showSummaryState = useState(false); var showSummary = showSummaryState[0], setShowSummary = showSummaryState[1];
-  var exOverridesState = useState(loadExerciseOverrides); var exOverrides = exOverridesState[0], setExOverrides = exOverridesState[1];
+  var daysListState = useState(loadDaysList); var daysList = daysListState[0], setDaysList = daysListState[1];
   var editModeState = useState(false); var editMode = editModeState[0], setEditMode = editModeState[1];
+  var draggingIndexState = useState(null); var draggingIndex = draggingIndexState[0], setDraggingIndex = draggingIndexState[1];
+  var pendingConfirmState = useState(null); var pendingConfirm = pendingConfirmState[0], setPendingConfirm = pendingConfirmState[1];
+  var toastState = useState(null); var toastMsg = toastState[0], setToastMsg = toastState[1];
+  var dragIndexRef = useRef(null);
   var saveTimer = useRef(null);
   var dataRef = useRef(data);
 
@@ -227,6 +223,12 @@ function CargaTracker(){
     }
   }, []);
 
+  useEffect(function(){
+    if (!toastMsg) return;
+    var t = setTimeout(function(){ setToastMsg(null); }, 2600);
+    return function(){ clearTimeout(t); };
+  }, [toastMsg]);
+
   var handleChange = function(dayKey, exId, value){
     setData(function(prev){
       var dayData = Object.assign({}, prev[dayKey] || {});
@@ -254,23 +256,130 @@ function CargaTracker(){
     });
   };
 
-  var saveExOverrides = function(next){
-    setExOverrides(next);
-    try { localStorage.setItem(EXERCISES_KEY, JSON.stringify(next)); } catch(e) {}
+  var saveDaysList = function(next){
+    setDaysList(next);
+    try { localStorage.setItem(DAYS_KEY, JSON.stringify(next)); } catch(e) {}
   };
 
-  var renameExercise = function(dayKey, exId, newName){
-    var dayOv = Object.assign({}, exOverrides[dayKey] || {});
-    dayOv[exId] = Object.assign({}, dayOv[exId] || {}, {name:newName});
-    var next = Object.assign({}, exOverrides); next[dayKey] = dayOv;
-    saveExOverrides(next);
+  var updateDayField = function(dayKey, field, value){
+    var next = daysList.map(function(d){
+      if (d.key !== dayKey) return d;
+      var nd = Object.assign({}, d); nd[field] = value; return nd;
+    });
+    saveDaysList(next);
+  };
+
+  var updateExerciseField = function(dayKey, exId, field, value){
+    var next = daysList.map(function(d){
+      if (d.key !== dayKey) return d;
+      var nd = Object.assign({}, d);
+      nd.exercises = d.exercises.map(function(ex){
+        if (ex.id !== exId) return ex;
+        var nex = Object.assign({}, ex); nex[field] = value; return nex;
+      });
+      return nd;
+    });
+    saveDaysList(next);
   };
 
   var toggleMainExercise = function(dayKey, exId, currentMain){
-    var dayOv = Object.assign({}, exOverrides[dayKey] || {});
-    dayOv[exId] = Object.assign({}, dayOv[exId] || {}, {main: !currentMain});
-    var next = Object.assign({}, exOverrides); next[dayKey] = dayOv;
-    saveExOverrides(next);
+    updateExerciseField(dayKey, exId, "main", !currentMain);
+  };
+
+  var renameExercise = function(dayKey, exId, newName){
+    updateExerciseField(dayKey, exId, "name", newName);
+  };
+
+  var updateExerciseReps = function(dayKey, exId, newReps){
+    updateExerciseField(dayKey, exId, "reps", newReps);
+  };
+
+  var addExercise = function(dayKey){
+    var newId = "ex-" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+    var next = daysList.map(function(d){
+      if (d.key !== dayKey) return d;
+      var nd = Object.assign({}, d);
+      nd.exercises = d.exercises.concat([{id:newId, name:"Novo exercício", reps:"3x10", main:false}]);
+      return nd;
+    });
+    saveDaysList(next);
+  };
+
+  var deleteExercise = function(dayKey, exId){
+    setPendingConfirm({
+      message: "Remover este exercício da lista?",
+      danger: true,
+      onConfirm: function(){
+        var next = daysList.map(function(d){
+          if (d.key !== dayKey) return d;
+          var nd = Object.assign({}, d);
+          nd.exercises = d.exercises.filter(function(ex){ return ex.id !== exId; });
+          return nd;
+        });
+        saveDaysList(next);
+      }
+    });
+  };
+
+  var MAX_DAYS = 7;
+
+  var addDay = function(){
+    if (daysList.length >= MAX_DAYS) { setToastMsg("Você pode ter no máximo " + MAX_DAYS + " dias de treino."); return; }
+    var color = DAY_COLOR_PALETTE[daysList.length % DAY_COLOR_PALETTE.length];
+    var newKey = "DIA_" + Date.now().toString(36);
+    var newDay = { key:newKey, title:"NOVO DIA", subtitle:"Toque para editar", color:color, exercises:[] };
+    var next = daysList.concat([newDay]);
+    saveDaysList(next);
+    setActiveDay(newKey);
+    setShowSummary(false);
+    setEditMode(true);
+  };
+
+  var deleteDay = function(dayKey){
+    if (daysList.length <= 1) { setToastMsg("Você precisa manter pelo menos um dia de treino."); return; }
+    var dayToDelete = daysList.filter(function(d){ return d.key === dayKey; })[0];
+    setPendingConfirm({
+      message: "Excluir \"" + (dayToDelete ? dayToDelete.title : "este dia") + "\"? Os pesos registrados nele deixarão de aparecer.",
+      danger: true,
+      onConfirm: function(){
+        var next = daysList.filter(function(d){ return d.key !== dayKey; });
+        saveDaysList(next);
+        if (activeDay === dayKey) setActiveDay(next[0].key);
+      }
+    });
+  };
+
+  var handleDayPointerDown = function(e, index){
+    if (!editMode) return;
+    dragIndexRef.current = index;
+    setDraggingIndex(index);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch(err) {}
+  };
+
+  var handleDayPointerMove = function(e){
+    if (dragIndexRef.current === null) return;
+    e.preventDefault();
+    var el = document.elementFromPoint(e.clientX, e.clientY);
+    var bubbleEl = el && el.closest ? el.closest("[data-day-index]") : null;
+    if (!bubbleEl) return;
+    var overIndex = parseInt(bubbleEl.getAttribute("data-day-index"), 10);
+    if (isNaN(overIndex) || overIndex === dragIndexRef.current) return;
+    var fromIndex = dragIndexRef.current;
+    setDaysList(function(prev){
+      if (fromIndex >= prev.length) return prev;
+      var next = prev.slice();
+      var moved = next.splice(fromIndex, 1)[0];
+      next.splice(overIndex, 0, moved);
+      try { localStorage.setItem(DAYS_KEY, JSON.stringify(next)); } catch(err) {}
+      return next;
+    });
+    dragIndexRef.current = overIndex;
+    setDraggingIndex(overIndex);
+  };
+
+  var handleDayPointerUp = function(){
+    dragIndexRef.current = null;
+    setDraggingIndex(null);
   };
 
   var saveProfile = function(next){
@@ -279,16 +388,21 @@ function CargaTracker(){
   };
 
   var handleReset = function(){
-    if (!window.confirm("Apagar todos os pesos e históricos salvos neste aparelho? Essa ação não pode ser desfeita.")) return;
-    setData({});
-    try { localStorage.removeItem(DATA_KEY); } catch(e) {}
-    setSaveState("idle");
+    setPendingConfirm({
+      message: "Apagar todos os pesos e históricos salvos neste aparelho? Essa ação não pode ser desfeita.",
+      danger: true,
+      onConfirm: function(){
+        setData({});
+        try { localStorage.removeItem(DATA_KEY); } catch(e) {}
+        setSaveState("idle");
+      }
+    });
   };
 
-  var currentDayBase = DAYS.filter(function(d){ return d.key === activeDay; })[0];
-  var currentDay = Object.assign({}, currentDayBase, {exercises: applyOverrides(currentDayBase, exOverrides)});
+  var currentDay = daysList.filter(function(d){ return d.key === activeDay; })[0] || daysList[0];
+  var currentDayIndex = daysList.indexOf(currentDay);
 
-  var daysRow = h("div", {className:"safe-top", style:{background:INK, padding:"22px 20px 0"}},
+  var daysRow = h("div", {style:{background:INK, paddingTop:"calc(22px + env(safe-area-inset-top))", paddingLeft:20, paddingRight:20, paddingBottom:0}},
     h("div", {style:{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4}},
       h("div", {style:{display:"flex", alignItems:"center", gap:10}},
         h("span", {style:{fontSize:18}}, "🏋️"),
@@ -317,46 +431,108 @@ function CargaTracker(){
       : h("div", {style:{color:"#8D8FA0", fontSize:12, marginBottom:18}},
           profile.name ? ("Treino de hipertrofia · " + profile.name) : "Treino de hipertrofia · toque em ✎ para adicionar seu nome"
         ),
-    h("div", {style:{display:"flex", gap:10, overflowX:"auto", overflowY:"hidden", paddingTop:8, paddingBottom:20, marginTop:-8}},
-      DAYS.map(function(d){
+    h("div", {style:{display:"flex", gap:14, overflowX: editMode?"visible":"auto", overflowY:"visible", padding:"6px 4px 20px"}},
+      daysList.map(function(d, i){
         var active = d.key === activeDay;
-        return h("button", {
+        var isDragging = draggingIndex === i;
+        return h("div", {
             key: d.key,
-            onClick: function(){ setActiveDay(d.key); setOpenHistory(null); },
-            style:{flex:"0 0 auto", display:"flex", flexDirection:"column", alignItems:"center", gap:6,
-              background:"none", border:"none", cursor:"pointer", padding:0,
-              opacity: active?1:0.55, transform: active?"translateY(-2px)":"none", transition:"all .18s ease"}
+            "data-day-index": i,
+            onPointerDown: function(e){ handleDayPointerDown(e, i); },
+            onPointerMove: handleDayPointerMove,
+            onPointerUp: handleDayPointerUp,
+            onPointerCancel: handleDayPointerUp,
+            style:{position:"relative", flex:"0 0 auto", display:"flex", flexDirection:"column", alignItems:"center", gap:3,
+              touchAction: editMode?"none":"auto", opacity: isDragging?0.5:1,
+              transition: isDragging?"none":"opacity .15s"}
           },
-          h("div", {style:{width:46, height:46, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
-              fontWeight:800, fontSize:17, color: active?INK:"#fff",
-              background: active?d.color:"transparent", border:"2.5px solid " + d.color,
-              boxShadow: active?("0 0 0 4px " + hexToRgba(d.color,0.18)):"none"}
-            }, "D" + d.n),
-          h("span", {style:{fontSize:9.5, fontWeight:700, letterSpacing:"0.06em", color: active?d.color:"#6E7080"}}, d.title)
+          h("button", {
+              onClick: function(){ setActiveDay(d.key); setOpenHistory(null); },
+              style:{display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                background:"none", border:"none", cursor: editMode?"grab":"pointer", padding:0,
+                opacity: active?1:0.55, transform: active?"translateY(-2px)":"none", transition:"all .18s ease"}
+            },
+            h("div", {style:{width:46, height:46, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+                fontWeight:800, fontSize:17, color: active?INK:"#fff",
+                background: active?d.color:"transparent", border:"2.5px solid " + d.color,
+                boxShadow: active?("0 0 0 4px " + hexToRgba(d.color,0.18)):"none"}
+              }, "D" + (i+1)),
+            h("span", {style:{fontSize:9.5, fontWeight:700, letterSpacing:"0.06em", color: active?d.color:"#6E7080", maxWidth:56, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}, d.title)
+          ),
+          editMode ? h("button", {
+              onClick: function(){ deleteDay(d.key); },
+              onPointerDown: function(e){ e.stopPropagation(); },
+              "aria-label": "Excluir " + d.title,
+              style:{background:"none", border:"none", color:"#D64545", fontSize:9.5, fontWeight:700,
+                cursor:"pointer", padding:"2px 4px"}
+            }, "✕ excluir") : null
         );
-      })
+      }).concat(
+        daysList.length < MAX_DAYS ? [
+          h("button", {
+              key:"add-day",
+              onClick: addDay,
+              "aria-label":"Adicionar dia de treino",
+              style:{flex:"0 0 auto", display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                background:"none", border:"none", cursor:"pointer", padding:0, opacity:0.7}
+            },
+            h("div", {style:{width:46, height:46, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+                fontWeight:800, fontSize:20, color:"#8D8FA0", border:"2.5px dashed #4A4C55"}
+              }, "+"),
+            h("span", {style:{fontSize:9.5, fontWeight:700, letterSpacing:"0.06em", color:"#6E7080"}}, "NOVO")
+          )
+        ] : []
+      )
     )
   );
 
-  var banner = h("div", {style:{background:currentDay.color, padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between"}},
-    h("div", null,
-      h("div", {style:{color:"rgba(0,0,0,0.55)", fontSize:11, fontWeight:700, letterSpacing:"0.08em"}}, "DIA " + currentDay.n),
-      h("div", {style:{color:INK, fontSize:20, fontWeight:800, letterSpacing:"-0.01em"}},
-        currentDay.title, " ", h("span", {style:{fontWeight:500}}, "— " + currentDay.subtitle)
-      )
-    ),
-    h("button", {
-        onClick: function(){ setShowSummary(!showSummary); },
-        style:{background:"rgba(0,0,0,0.14)", border:"none", borderRadius:16, color:INK, fontWeight:700,
-          fontSize:11, padding:"7px 12px", cursor:"pointer"}
-      }, showSummary ? "Registrar" : "Resumo")
+  var banner = h("div", {style:{background:currentDay.color, padding:"14px 20px"}},
+    h("div", {style:{display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:10}},
+      editMode
+        ? h("div", {style:{flex:1, minWidth:0}},
+            h("div", {style:{color:"rgba(0,0,0,0.55)", fontSize:11, fontWeight:700, letterSpacing:"0.08em", marginBottom:4}}, "DIA " + (currentDayIndex+1)),
+            h("input", {
+              value: currentDay.title, "aria-label":"Nome do treino do dia",
+              onChange: function(e){ updateDayField(currentDay.key, "title", e.target.value.toUpperCase()); },
+              style:{display:"block", width:"100%", background:"rgba(255,255,255,0.5)", border:"1px solid rgba(0,0,0,0.2)",
+                borderRadius:6, color:INK, fontSize:18, fontWeight:800, padding:"5px 8px", marginBottom:6}
+            }),
+            h("input", {
+              value: currentDay.subtitle, "aria-label":"Subtítulo do treino do dia",
+              onChange: function(e){ updateDayField(currentDay.key, "subtitle", e.target.value); },
+              style:{display:"block", width:"100%", background:"rgba(255,255,255,0.5)", border:"1px solid rgba(0,0,0,0.2)",
+                borderRadius:6, color:INK, fontSize:12.5, fontWeight:500, padding:"5px 8px", marginBottom:8}
+            }),
+            h("div", {style:{display:"flex", gap:6, flexWrap:"wrap"}},
+              DAY_COLOR_PALETTE.map(function(c){
+                return h("button", {
+                    key:c, onClick: function(){ updateDayField(currentDay.key, "color", c); },
+                    "aria-label":"Cor " + c,
+                    style:{width:22, height:22, borderRadius:"50%", background:c, cursor:"pointer",
+                      border: c===currentDay.color ? "2.5px solid " + INK : "2.5px solid rgba(0,0,0,0.15)"}
+                  });
+              })
+            )
+          )
+        : h("div", null,
+            h("div", {style:{color:"rgba(0,0,0,0.55)", fontSize:11, fontWeight:700, letterSpacing:"0.08em"}}, "DIA " + (currentDayIndex+1)),
+            h("div", {style:{color:INK, fontSize:20, fontWeight:800, letterSpacing:"-0.01em"}},
+              currentDay.title, currentDay.subtitle ? " " : null, currentDay.subtitle ? h("span", {style:{fontWeight:500}}, "— " + currentDay.subtitle) : null
+            )
+          ),
+      h("button", {
+          onClick: function(){ setShowSummary(!showSummary); },
+          style:{flexShrink:0, background:"rgba(0,0,0,0.14)", border:"none", borderRadius:16, color:INK, fontWeight:700,
+            fontSize:11, padding:"7px 12px", cursor:"pointer"}
+        }, showSummary ? "Registrar" : "Resumo")
+    )
   );
 
   var toolbar = h("div", {style:{display:"flex", gap:8, padding:"12px 14px 0"}},
     h("button", {
         onClick: function(){ setEditMode(!editMode); },
         style: Object.assign({}, toolbarBtnStyle, editMode ? {background:currentDay.color, color:INK, borderColor:currentDay.color} : {})
-      }, editMode ? "✓ Concluir edição" : "✎ Editar exercícios"),
+      }, editMode ? "✓ Concluir edição" : "✎ Editar treino"),
     h("button", {onClick:handleReset, style:Object.assign({}, toolbarBtnStyle, {color:"#D64545", borderColor:"#F2C6C6"})}, "Apagar tudo")
   );
 
@@ -389,26 +565,41 @@ function CargaTracker(){
           h("div", {style:{display:"flex", alignItems:"center", padding:"12px 12px"}},
             h("div", {style:{flex:1, minWidth:0}},
               editMode
-                ? h("div", {style:{display:"flex", alignItems:"center", gap:8}},
-                    h("button", {
-                        onClick: function(){ toggleMainExercise(currentDay.key, ex.id, ex.main); },
-                        "aria-label": ex.main ? "Remover como principal" : "Marcar como principal",
-                        style:{background:"none", border:"none", cursor:"pointer", fontSize:16,
-                          color: ex.main ? "#E8A020" : "#C9CBD6", padding:0, lineHeight:1, flexShrink:0}
-                      }, ex.main ? "★" : "☆"),
+                ? h("div", {style:{display:"flex", flexDirection:"column", gap:6}},
+                    h("div", {style:{display:"flex", alignItems:"center", gap:8}},
+                      h("button", {
+                          onClick: function(){ toggleMainExercise(currentDay.key, ex.id, ex.main); },
+                          "aria-label": ex.main ? "Remover como principal" : "Marcar como principal",
+                          style:{background:"none", border:"none", cursor:"pointer", fontSize:16,
+                            color: ex.main ? "#E8A020" : "#C9CBD6", padding:0, lineHeight:1, flexShrink:0}
+                        }, ex.main ? "★" : "☆"),
+                      h("input", {
+                        type:"text", value: ex.name,
+                        "aria-label": "Nome do exercício",
+                        onChange: function(e){ renameExercise(currentDay.key, ex.id, e.target.value); },
+                        style:{flex:1, minWidth:0, fontSize:13.5, fontWeight:500, color:INK,
+                          border:"1px solid " + LINE, borderRadius:6, padding:"6px 8px"}
+                      }),
+                      h("button", {
+                          onClick: function(){ deleteExercise(currentDay.key, ex.id); },
+                          "aria-label": "Excluir exercício",
+                          style:{background:"none", border:"none", cursor:"pointer", fontSize:14, color:"#D64545", padding:"0 2px", flexShrink:0}
+                        }, "✕")
+                    ),
                     h("input", {
-                      type:"text", value: ex.name,
-                      "aria-label": "Nome do exercício",
-                      onChange: function(e){ renameExercise(currentDay.key, ex.id, e.target.value); },
-                      style:{flex:1, minWidth:0, fontSize:13.5, fontWeight:500, color:INK,
-                        border:"1px solid " + LINE, borderRadius:6, padding:"6px 8px"}
+                      type:"text", value: ex.reps,
+                      "aria-label": "Séries e repetições",
+                      placeholder: "ex.: 4x8-10",
+                      onChange: function(e){ updateExerciseReps(currentDay.key, ex.id, e.target.value); },
+                      style:{width:110, fontSize:11.5, color:MUTED,
+                        border:"1px solid " + LINE, borderRadius:6, padding:"5px 7px", marginLeft:24}
                     })
                   )
                 : h("div", {style:{fontWeight: ex.main?700:500, fontSize:13.5, color:INK, display:"flex", alignItems:"center", gap:6}},
                     ex.main && h("span", {style:{color:"#E8A020", fontSize:12}}, "★"),
                     h("span", null, ex.name)
                   ),
-              h("div", {style:{fontSize:11.5, color:MUTED, marginTop:2}}, ex.reps)
+              !editMode && h("div", {style:{fontSize:11.5, color:MUTED, marginTop:2}}, ex.reps)
             ),
             !editMode && h("div", {style:{display:"flex", alignItems:"center", gap:6}},
               h("input", {
@@ -448,7 +639,16 @@ function CargaTracker(){
             )
           ) : null
         );
-      })
+      }).concat(
+        editMode ? [
+          h("button", {
+              key:"add-exercise",
+              onClick: function(){ addExercise(currentDay.key); },
+              style:{background:"#fff", border:"1.5px dashed " + LINE, borderRadius:10, color:MUTED,
+                fontSize:12.5, fontWeight:600, padding:"12px", cursor:"pointer"}
+            }, "+ Adicionar exercício")
+        ] : []
+      )
     );
   }
 
@@ -457,7 +657,7 @@ function CargaTracker(){
     h("span", null, "★ marca os exercícios principais. Os pesos são salvos automaticamente neste aparelho enquanto você digita.")
   );
 
-  var saveIndicator = h("div", {className:"safe-bottom", style:{position:"fixed", bottom:16, left:"50%",
+  var saveIndicator = h("div", {style:{position:"fixed", bottom:"calc(16px + env(safe-area-inset-bottom))", left:"50%",
       transform: "translateX(-50%) translateY(" + (saveState==="idle"?20:0) + "px)",
       opacity: saveState==="idle"?0:1, transition:"all .25s ease",
       background:INK, color:"#fff", padding:"8px 14px", borderRadius:20, fontSize:11.5, fontWeight:600,
@@ -467,12 +667,41 @@ function CargaTracker(){
       : h(React.Fragment, null, h("span", {style:{color:currentDay.color}}, "✓"), "Salvo neste aparelho")
   );
 
+  var confirmModal = pendingConfirm ? h("div", {
+      style:{position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", display:"flex",
+        alignItems:"center", justifyContent:"center", padding:24, zIndex:20}
+    },
+    h("div", {style:{background:"#fff", borderRadius:14, padding:"20px 18px", maxWidth:320, width:"100%",
+        boxShadow:"0 10px 30px rgba(0,0,0,.25)"}},
+      h("div", {style:{fontSize:14, color:INK, lineHeight:1.5, marginBottom:18}}, pendingConfirm.message),
+      h("div", {style:{display:"flex", gap:8}},
+        h("button", {
+            onClick: function(){ setPendingConfirm(null); },
+            style:{flex:1, background:"#F4F4F6", border:"none", borderRadius:8, color:"#4A4C55",
+              fontSize:12.5, fontWeight:700, padding:"10px 6px", cursor:"pointer"}
+          }, "Cancelar"),
+        h("button", {
+            onClick: function(){ var action = pendingConfirm.onConfirm; setPendingConfirm(null); if (action) action(); },
+            style:{flex:1, background: pendingConfirm.danger ? "#D64545" : INK, border:"none", borderRadius:8, color:"#fff",
+              fontSize:12.5, fontWeight:700, padding:"10px 6px", cursor:"pointer"}
+          }, "Confirmar")
+      )
+    )
+  ) : null;
+
+  var toast = toastMsg ? h("div", {style:{position:"fixed", top:"calc(16px + env(safe-area-inset-top))", left:"50%",
+      transform:"translateX(-50%)", background:INK, color:"#fff", padding:"9px 16px", borderRadius:20,
+      fontSize:12, fontWeight:600, boxShadow:"0 4px 14px rgba(0,0,0,.25)", zIndex:21, maxWidth:"85%", textAlign:"center"}
+    }, toastMsg) : null;
+
   return h("div", {style:{background:PAPER, minHeight:"100vh"}},
     daysRow,
     banner,
     toolbar,
     h("div", {style:{padding:"16px 14px 100px"}}, list, footerNote),
-    saveIndicator
+    saveIndicator,
+    confirmModal,
+    toast
   );
 }
 
