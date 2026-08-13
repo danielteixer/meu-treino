@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>Cargas — Treino</title>
+
+<!-- iOS: faz o link virar um "app" quando adicionado à Tela de Início -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Cargas" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<link rel="icon" href="favicon.png" />
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#14151A" />
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: #F4F4F6; font-family: -apple-system, Helvetica, Arial, sans-serif; }
+  input:focus { outline: none; }
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .safe-top { padding-top: env(safe-area-inset-top); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const INK = "#14151A", PAPER = "#F4F4F6", LINE = "#E4E5EA", MUTED = "#8A8D98";
+
+const DAYS = [
+  { key:"DIA1", n:"1", title:"PUSH", subtitle:"Peito, Ombro e Tríceps", color:"#FF4B3E", exercises:[
+    {name:"Supino reto (barra ou halteres)", reps:"4x8-10", main:true},
+    {name:"Supino inclinado com halteres", reps:"3x10-12", main:false},
+    {name:"Desenvolvimento de ombro (halteres)", reps:"3x10-12", main:true},
+    {name:"Elevação lateral", reps:"3x12-15", main:false},
+    {name:"Crucifixo ou peck deck", reps:"3x12-15", main:false},
+    {name:"Tríceps corda (polia)", reps:"3x12-15", main:false},
+    {name:"Tríceps francês", reps:"3x10-12", main:false},
+  ]},
+  { key:"DIA2", n:"2", title:"PULL", subtitle:"Costas e Bíceps", color:"#3E8EFF", exercises:[
+    {name:"Barra fixa (ou puxada frontal)", reps:"4x8-10", main:true},
+    {name:"Remada curvada (barra)", reps:"4x8-10", main:true},
+    {name:"Remada baixa (polia)", reps:"3x10-12", main:false},
+    {name:"Puxada aberta (pulldown)", reps:"3x10-12", main:false},
+    {name:"Rosca direta (barra)", reps:"3x10-12", main:false},
+    {name:"Rosca martelo", reps:"3x10-12", main:false},
+  ]},
+  { key:"DIA3", n:"3", title:"LEGS", subtitle:"Pernas Completo", color:"#3ECF8E", exercises:[
+    {name:"Agachamento livre", reps:"4x8-10", main:true},
+    {name:"Leg press", reps:"4x10-12", main:true},
+    {name:"Cadeira extensora", reps:"3x12-15", main:false},
+    {name:"Mesa flexora", reps:"3x12-15", main:false},
+    {name:"Panturrilha em pé", reps:"4x15-20", main:false},
+  ]},
+  { key:"DIA4", n:"4", title:"UPPER", subtitle:"Superior Geral", color:"#B15EFF", exercises:[
+    {name:"Supino inclinado (barra)", reps:"4x8-10", main:true},
+    {name:"Remada unilateral (halter)", reps:"4x8-10", main:true},
+    {name:"Desenvolvimento militar (barra)", reps:"3x8-10", main:true},
+    {name:"Elevação lateral", reps:"3x12-15", main:false},
+    {name:"Rosca alternada", reps:"3x10-12", main:false},
+    {name:"Tríceps testa", reps:"3x10-12", main:false},
+  ]},
+  { key:"DIA5", n:"5", title:"LOWER", subtitle:"Inferior + Posterior", color:"#FFB13E", exercises:[
+    {name:"Levantamento terra romeno (RDL)", reps:"4x8-10", main:true},
+    {name:"Agachamento búlgaro", reps:"3x10-12 / perna", main:true},
+    {name:"Cadeira flexora", reps:"3x12-15", main:false},
+    {name:"Hip thrust", reps:"3x10-12", main:false},
+    {name:"Panturrilha sentado", reps:"4x15-20", main:false},
+    {name:"Abdômen (prancha + pernas)", reps:"3x séries", main:false},
+  ]},
+];
+
+const STORAGE_KEY = "hipertrofia-pesos-v1";
+
+function todayLabel(){
+  const d = new Date();
+  return d.toLocaleDateString("pt-BR", {day:"2-digit", month:"2-digit", year:"numeric"});
+}
+function hexToRgba(hex, alpha){
+  const h = hex.replace("#","");
+  const r=parseInt(h.substring(0,2),16), g=parseInt(h.substring(2,4),16), b=parseInt(h.substring(4,6),16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function CargaTracker(){
+  const [activeDay, setActiveDay] = useState("DIA1");
+  const [data, setData] = useState({});
+  const [saveState, setSaveState] = useState("idle");
+  const [openHistory, setOpenHistory] = useState(null);
+  const saveTimer = useRef(null);
+  const dataRef = useRef({});
+
+  useEffect(() => { dataRef.current = data; }, [data]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) setData(JSON.parse(raw));
+    } catch(e) {}
+  }, []);
+
+  const persist = useCallback((next) => {
+    setSaveState("saving");
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      setSaveState("saved");
+      setTimeout(() => setSaveState(s => s === "saved" ? "idle" : s), 1600);
+    } catch(e) { setSaveState("idle"); }
+  }, []);
+
+  const scheduleSave = useCallback((next) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => persist(dataRef.current), 450);
+  }, [persist]);
+
+  useEffect(() => {
+    const flush = () => { if (saveTimer.current) { clearTimeout(saveTimer.current); persist(dataRef.current); } };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("visibilitychange", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("visibilitychange", flush);
+      flush();
+    };
+  }, []);
+
+  const handleChange = (dayKey, idx, value) => {
+    setData(prev => {
+      const dayData = {...(prev[dayKey]||{})};
+      const cell = dayData[idx] || {value:"", history:[]};
+      dayData[idx] = {...cell, value};
+      const next = {...prev, [dayKey]: dayData};
+      scheduleSave(next);
+      return next;
+    });
+  };
+
+  const commitEntry = (dayKey, idx) => {
+    setData(prev => {
+      const dayData = {...(prev[dayKey]||{})};
+      const cell = dayData[idx] || {value:"", history:[]};
+      if (cell.value === "" || cell.value === undefined) return prev;
+      const history = Array.isArray(cell.history) ? [...cell.history] : [];
+      const today = todayLabel();
+      const filtered = history.filter(h => h.date !== today);
+      filtered.unshift({date: today, value: cell.value});
+      dayData[idx] = {...cell, history: filtered.slice(0,5), updatedAt: today};
+      const next = {...prev, [dayKey]: dayData};
+      scheduleSave(next);
+      return next;
+    });
+  };
+
+  const currentDay = DAYS.find(d => d.key === activeDay);
+
+  return (
+    <div style={{background:PAPER, minHeight:"100vh"}}>
+      <div className="safe-top" style={{background:INK, padding:"22px 20px 0"}}>
+        <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:4}}>
+          <span style={{fontSize:18}}>🏋️</span>
+          <span style={{color:"#fff", fontWeight:800, fontSize:15, letterSpacing:"0.14em"}}>REGISTRO DE CARGAS</span>
+        </div>
+        <div style={{color:"#8D8FA0", fontSize:12, marginBottom:18}}>
+          Treino de hipertrofia · 1,77 m · 62 kg → 75 kg
+        </div>
+        <div style={{display:"flex", gap:10, overflowX:"auto", paddingBottom:16}}>
+          {DAYS.map(d => {
+            const active = d.key === activeDay;
+            return (
+              <button key={d.key} onClick={() => setActiveDay(d.key)}
+                style={{flex:"0 0 auto", display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                  background:"none", border:"none", cursor:"pointer", padding:0,
+                  opacity: active?1:0.55, transform: active?"translateY(-2px)":"none", transition:"all .18s ease"}}>
+                <div style={{width:46, height:46, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+                  fontWeight:800, fontSize:17, color: active?INK:"#fff",
+                  background: active?d.color:"transparent", border:`2.5px solid ${d.color}`,
+                  boxShadow: active?`0 0 0 4px ${hexToRgba(d.color,0.18)}`:"none"}}>
+                  D{d.n}
+                </div>
+                <span style={{fontSize:9.5, fontWeight:700, letterSpacing:"0.06em", color: active?d.color:"#6E7080"}}>{d.title}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{background:currentDay.color, padding:"14px 20px"}}>
+        <div style={{color:"rgba(0,0,0,0.55)", fontSize:11, fontWeight:700, letterSpacing:"0.08em"}}>DIA {currentDay.n}</div>
+        <div style={{color:INK, fontSize:20, fontWeight:800, letterSpacing:"-0.01em"}}>
+          {currentDay.title} <span style={{fontWeight:500}}>— {currentDay.subtitle}</span>
+        </div>
+      </div>
+
+      <div style={{padding:"16px 14px 100px"}}>
+        <div style={{display:"flex", flexDirection:"column", gap:10}}>
+          {currentDay.exercises.map((ex, idx) => {
+            const cell = (data[currentDay.key]||{})[idx] || {value:"", history:[]};
+            const historyKey = `${currentDay.key}-${idx}`;
+            const isOpen = openHistory === historyKey;
+            return (
+              <div key={idx} style={{background:"#fff", borderRadius:10, border:`1px solid ${LINE}`, overflow:"hidden"}}>
+                <div style={{display:"flex", alignItems:"center", padding:"12px 12px"}}>
+                  <div style={{flex:1, minWidth:0}}>
+                    <div style={{fontWeight: ex.main?700:500, fontSize:13.5, color:INK, display:"flex", alignItems:"center", gap:6}}>
+                      {ex.main && <span style={{color:"#E8A020", fontSize:12}}>★</span>}
+                      <span>{ex.name}</span>
+                    </div>
+                    <div style={{fontSize:11.5, color:MUTED, marginTop:2}}>{ex.reps}</div>
+                  </div>
+                  <div style={{display:"flex", alignItems:"center", gap:6}}>
+                    <input type="number" inputMode="decimal" placeholder="—" value={cell.value||""}
+                      onChange={e => handleChange(currentDay.key, idx, e.target.value)}
+                      onBlur={() => commitEntry(currentDay.key, idx)}
+                      style={{width:58, textAlign:"center", fontSize:15, fontWeight:700, color:INK,
+                        border:`1.5px solid ${cell.value?currentDay.color:LINE}`, borderRadius:7, padding:"7px 4px",
+                        fontVariantNumeric:"tabular-nums"}} />
+                    <span style={{fontSize:11, color:MUTED, fontWeight:600, width:16}}>kg</span>
+                  </div>
+                </div>
+                {(cell.history && cell.history.length>0) || cell.updatedAt ? (
+                  <button onClick={() => setOpenHistory(isOpen?null:historyKey)}
+                    style={{width:"100%", background: isOpen?"#FAFAFB":"transparent", border:"none",
+                      borderTop:`1px solid ${LINE}`, padding:"6px 12px", display:"flex", alignItems:"center",
+                      justifyContent:"space-between", cursor:"pointer"}}>
+                    <span style={{display:"flex", alignItems:"center", gap:5, fontSize:10.5, color:MUTED}}>
+                      🕐 {cell.updatedAt ? `Atualizado em ${cell.updatedAt}` : "Ver histórico"}
+                    </span>
+                    <span style={{color:MUTED, transform: isOpen?"rotate(90deg)":"none", transition:"transform .15s", display:"inline-block"}}>›</span>
+                  </button>
+                ) : null}
+                {isOpen && cell.history && cell.history.length>0 && (
+                  <div style={{padding:"8px 12px 12px", background:"#FAFAFB"}}>
+                    <div style={{display:"flex", flexDirection:"column", gap:4}}>
+                      {cell.history.map((h,i) => (
+                        <div key={i} style={{display:"flex", justifyContent:"space-between", fontSize:11.5, color:"#4A4C55",
+                          padding:"3px 0", borderBottom: i!==cell.history.length-1?`1px dashed ${LINE}`:"none"}}>
+                          <span>{h.date}</span>
+                          <span style={{fontWeight:700, color:INK}}>{h.value} kg</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{marginTop:14, display:"flex", gap:8, alignItems:"flex-start", color:MUTED, fontSize:11, lineHeight:1.5, padding:"0 4px"}}>
+          <span>ℹ️</span>
+          <span>★ marca os exercícios principais. Os pesos são salvos automaticamente neste iPhone enquanto você digita.</span>
+        </div>
+      </div>
+
+      <div className="safe-bottom" style={{position:"fixed", bottom:16, left:"50%",
+        transform:`translateX(-50%) translateY(${saveState==="idle"?20:0}px)`,
+        opacity: saveState==="idle"?0:1, transition:"all .25s ease",
+        background:INK, color:"#fff", padding:"8px 14px", borderRadius:20, fontSize:11.5, fontWeight:600,
+        display:"flex", alignItems:"center", gap:6, boxShadow:"0 4px 14px rgba(0,0,0,.25)", pointerEvents:"none"}}>
+        {saveState==="saving" ? (
+          <><span style={{width:7,height:7,borderRadius:"50%",background:currentDay.color,animation:"pulse 1s infinite"}}/>Salvando…</>
+        ) : (
+          <><span style={{color:currentDay.color}}>✓</span>Salvo neste iPhone</>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<CargaTracker />);
+</script>
+</body>
+</html>
