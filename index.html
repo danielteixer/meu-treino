@@ -23,6 +23,7 @@
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
   .safe-top { padding-top: env(safe-area-inset-top); }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  button { font-family: inherit; }
 </style>
 </head>
 <body>
@@ -30,254 +31,436 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 
-<script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef, useCallback } = React;
+<script>
+"use strict";
+var h = React.createElement;
+var useState = React.useState, useEffect = React.useEffect, useRef = React.useRef, useCallback = React.useCallback;
 
-const INK = "#14151A", PAPER = "#F4F4F6", LINE = "#E4E5EA", MUTED = "#8A8D98";
+var INK = "#14151A", PAPER = "#F4F4F6", LINE = "#E4E5EA", MUTED = "#8A8D98";
 
-const DAYS = [
+var DAYS = [
   { key:"DIA1", n:"1", title:"PUSH", subtitle:"Peito, Ombro e Tríceps", color:"#FF4B3E", exercises:[
-    {name:"Supino reto (barra ou halteres)", reps:"4x8-10", main:true},
-    {name:"Supino inclinado com halteres", reps:"3x10-12", main:false},
-    {name:"Desenvolvimento de ombro (halteres)", reps:"3x10-12", main:true},
-    {name:"Elevação lateral", reps:"3x12-15", main:false},
-    {name:"Crucifixo ou peck deck", reps:"3x12-15", main:false},
-    {name:"Tríceps corda (polia)", reps:"3x12-15", main:false},
-    {name:"Tríceps francês", reps:"3x10-12", main:false},
+    {id:"supino-reto", name:"Supino reto (barra ou halteres)", reps:"4x8-10", main:true},
+    {id:"supino-inclinado-halteres", name:"Supino inclinado com halteres", reps:"3x10-12", main:false},
+    {id:"desenvolvimento-ombro", name:"Desenvolvimento de ombro (halteres)", reps:"3x10-12", main:true},
+    {id:"elevacao-lateral-push", name:"Elevação lateral", reps:"3x12-15", main:false},
+    {id:"crucifixo-peck-deck", name:"Crucifixo ou peck deck", reps:"3x12-15", main:false},
+    {id:"triceps-corda", name:"Tríceps corda (polia)", reps:"3x12-15", main:false},
+    {id:"triceps-frances", name:"Tríceps francês", reps:"3x10-12", main:false},
   ]},
   { key:"DIA2", n:"2", title:"PULL", subtitle:"Costas e Bíceps", color:"#3E8EFF", exercises:[
-    {name:"Barra fixa (ou puxada frontal)", reps:"4x8-10", main:true},
-    {name:"Remada curvada (barra)", reps:"4x8-10", main:true},
-    {name:"Remada baixa (polia)", reps:"3x10-12", main:false},
-    {name:"Puxada aberta (pulldown)", reps:"3x10-12", main:false},
-    {name:"Rosca direta (barra)", reps:"3x10-12", main:false},
-    {name:"Rosca martelo", reps:"3x10-12", main:false},
+    {id:"barra-fixa", name:"Barra fixa (ou puxada frontal)", reps:"4x8-10", main:true},
+    {id:"remada-curvada", name:"Remada curvada (barra)", reps:"4x8-10", main:true},
+    {id:"remada-baixa", name:"Remada baixa (polia)", reps:"3x10-12", main:false},
+    {id:"puxada-aberta", name:"Puxada aberta (pulldown)", reps:"3x10-12", main:false},
+    {id:"rosca-direta", name:"Rosca direta (barra)", reps:"3x10-12", main:false},
+    {id:"rosca-martelo", name:"Rosca martelo", reps:"3x10-12", main:false},
   ]},
   { key:"DIA3", n:"3", title:"LEGS", subtitle:"Pernas Completo", color:"#3ECF8E", exercises:[
-    {name:"Agachamento livre", reps:"4x8-10", main:true},
-    {name:"Leg press", reps:"4x10-12", main:true},
-    {name:"Cadeira extensora", reps:"3x12-15", main:false},
-    {name:"Mesa flexora", reps:"3x12-15", main:false},
-    {name:"Panturrilha em pé", reps:"4x15-20", main:false},
+    {id:"agachamento-livre", name:"Agachamento livre", reps:"4x8-10", main:true},
+    {id:"leg-press", name:"Leg press", reps:"4x10-12", main:true},
+    {id:"cadeira-extensora", name:"Cadeira extensora", reps:"3x12-15", main:false},
+    {id:"mesa-flexora", name:"Mesa flexora", reps:"3x12-15", main:false},
+    {id:"panturrilha-em-pe", name:"Panturrilha em pé", reps:"4x15-20", main:false},
   ]},
   { key:"DIA4", n:"4", title:"UPPER", subtitle:"Superior Geral", color:"#B15EFF", exercises:[
-    {name:"Supino inclinado (barra)", reps:"4x8-10", main:true},
-    {name:"Remada unilateral (halter)", reps:"4x8-10", main:true},
-    {name:"Desenvolvimento militar (barra)", reps:"3x8-10", main:true},
-    {name:"Elevação lateral", reps:"3x12-15", main:false},
-    {name:"Rosca alternada", reps:"3x10-12", main:false},
-    {name:"Tríceps testa", reps:"3x10-12", main:false},
+    {id:"supino-inclinado-barra", name:"Supino inclinado (barra)", reps:"4x8-10", main:true},
+    {id:"remada-unilateral", name:"Remada unilateral (halter)", reps:"4x8-10", main:true},
+    {id:"desenvolvimento-militar", name:"Desenvolvimento militar (barra)", reps:"3x8-10", main:true},
+    {id:"elevacao-lateral-upper", name:"Elevação lateral", reps:"3x12-15", main:false},
+    {id:"rosca-alternada", name:"Rosca alternada", reps:"3x10-12", main:false},
+    {id:"triceps-testa", name:"Tríceps testa", reps:"3x10-12", main:false},
   ]},
   { key:"DIA5", n:"5", title:"LOWER", subtitle:"Inferior + Posterior", color:"#FFB13E", exercises:[
-    {name:"Levantamento terra romeno (RDL)", reps:"4x8-10", main:true},
-    {name:"Agachamento búlgaro", reps:"3x10-12 / perna", main:true},
-    {name:"Cadeira flexora", reps:"3x12-15", main:false},
-    {name:"Hip thrust", reps:"3x10-12", main:false},
-    {name:"Panturrilha sentado", reps:"4x15-20", main:false},
-    {name:"Abdômen (prancha + pernas)", reps:"3x séries", main:false},
+    {id:"terra-romeno", name:"Levantamento terra romeno (RDL)", reps:"4x8-10", main:true},
+    {id:"agachamento-bulgaro", name:"Agachamento búlgaro", reps:"3x10-12 / perna", main:true},
+    {id:"cadeira-flexora", name:"Cadeira flexora", reps:"3x12-15", main:false},
+    {id:"hip-thrust", name:"Hip thrust", reps:"3x10-12", main:false},
+    {id:"panturrilha-sentado", name:"Panturrilha sentado", reps:"4x15-20", main:false},
+    {id:"abdomen-prancha", name:"Abdômen (prancha + pernas)", reps:"3x séries", main:false},
   ]},
 ];
 
-const STORAGE_KEY = "hipertrofia-pesos-v1";
+var DATA_KEY = "cargas-dados-v2";
+var OLD_DATA_KEY = "hipertrofia-pesos-v1";
+var PROFILE_KEY = "cargas-perfil-v1";
+var DEFAULT_PROFILE = { height:"1,77 m", start:"62 kg", goal:"75 kg" };
 
 function todayLabel(){
-  const d = new Date();
+  var d = new Date();
   return d.toLocaleDateString("pt-BR", {day:"2-digit", month:"2-digit", year:"numeric"});
 }
 function hexToRgba(hex, alpha){
-  const h = hex.replace("#","");
-  const r=parseInt(h.substring(0,2),16), g=parseInt(h.substring(2,4),16), b=parseInt(h.substring(4,6),16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  var hx = hex.replace("#","");
+  var r=parseInt(hx.substring(0,2),16), g=parseInt(hx.substring(2,4),16), b=parseInt(hx.substring(4,6),16);
+  return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
+}
+
+// Migra dados antigos (chave = índice do exercício) para o formato novo (chave = id estável),
+// caso o usuário já tivesse histórico salvo antes dessa atualização.
+function loadInitialData(){
+  try {
+    var raw = localStorage.getItem(DATA_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  try {
+    var old = localStorage.getItem(OLD_DATA_KEY);
+    if (old) {
+      var oldData = JSON.parse(old);
+      var migrated = {};
+      DAYS.forEach(function(day){
+        var oldDay = oldData[day.key];
+        if (!oldDay) return;
+        var newDay = {};
+        day.exercises.forEach(function(ex, idx){
+          var cell = oldDay[idx];
+          if (cell) newDay[ex.id] = cell;
+        });
+        migrated[day.key] = newDay;
+      });
+      return migrated;
+    }
+  } catch(e) {}
+  return {};
+}
+
+function loadProfile(){
+  try {
+    var raw = localStorage.getItem(PROFILE_KEY);
+    if (raw) return Object.assign({}, DEFAULT_PROFILE, JSON.parse(raw));
+  } catch(e) {}
+  return DEFAULT_PROFILE;
+}
+
+function Sparkline(props){
+  var history = props.history || [];
+  if (history.length < 2) {
+    return h("span", {style:{fontSize:10.5, color:MUTED}}, "sem histórico suficiente");
+  }
+  var vals = history.slice().reverse().map(function(x){ return parseFloat(x.value) || 0; });
+  var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+  var range = (max - min) || 1;
+  var w = 64, hgt = 22, pad = 3;
+  var pts = vals.map(function(v, i){
+    var x = pad + (i * (w - pad*2) / (vals.length - 1));
+    var y = hgt - pad - ((v - min) / range) * (hgt - pad*2);
+    return x.toFixed(1) + "," + y.toFixed(1);
+  }).join(" ");
+  var delta = vals[vals.length-1] - vals[0];
+  var color = delta > 0 ? "#2E9E5B" : (delta < 0 ? "#D64545" : MUTED);
+  return h("div", {style:{display:"flex", alignItems:"center", gap:6}},
+    h("svg", {width:w, height:hgt, viewBox:"0 0 " + w + " " + hgt},
+      h("polyline", {points:pts, fill:"none", stroke:props.color || INK, strokeWidth:1.6, strokeLinecap:"round", strokeLinejoin:"round"})
+    ),
+    h("span", {style:{fontSize:10.5, fontWeight:700, color:color}},
+      (delta > 0 ? "+" : "") + delta.toFixed(1) + " kg"
+    )
+  );
 }
 
 function CargaTracker(){
-  const [activeDay, setActiveDay] = useState("DIA1");
-  const [data, setData] = useState({});
-  const [saveState, setSaveState] = useState("idle");
-  const [openHistory, setOpenHistory] = useState(null);
-  const saveTimer = useRef(null);
-  const dataRef = useRef({});
+  var activeDayState = useState("DIA1"); var activeDay = activeDayState[0], setActiveDay = activeDayState[1];
+  var dataState = useState(loadInitialData); var data = dataState[0], setData = dataState[1];
+  var profileState = useState(loadProfile); var profile = profileState[0], setProfile = profileState[1];
+  var editingProfileState = useState(false); var editingProfile = editingProfileState[0], setEditingProfile = editingProfileState[1];
+  var saveStateState = useState("idle"); var saveState = saveStateState[0], setSaveState = saveStateState[1];
+  var openHistoryState = useState(null); var openHistory = openHistoryState[0], setOpenHistory = openHistoryState[1];
+  var showSummaryState = useState(false); var showSummary = showSummaryState[0], setShowSummary = showSummaryState[1];
+  var saveTimer = useRef(null);
+  var dataRef = useRef(data);
+  var fileInputRef = useRef(null);
 
-  useEffect(() => { dataRef.current = data; }, [data]);
+  useEffect(function(){ dataRef.current = data; }, [data]);
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setData(JSON.parse(raw));
-    } catch(e) {}
-  }, []);
-
-  const persist = useCallback((next) => {
+  var persist = useCallback(function(next){
     setSaveState("saving");
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      localStorage.setItem(DATA_KEY, JSON.stringify(next));
       setSaveState("saved");
-      setTimeout(() => setSaveState(s => s === "saved" ? "idle" : s), 1600);
+      setTimeout(function(){ setSaveState(function(s){ return s === "saved" ? "idle" : s; }); }, 1600);
     } catch(e) { setSaveState("idle"); }
   }, []);
 
-  const scheduleSave = useCallback((next) => {
+  var scheduleSave = useCallback(function(next){
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => persist(dataRef.current), 450);
+    saveTimer.current = setTimeout(function(){ persist(dataRef.current); }, 450);
   }, [persist]);
 
-  useEffect(() => {
-    const flush = () => { if (saveTimer.current) { clearTimeout(saveTimer.current); persist(dataRef.current); } };
+  useEffect(function(){
+    function flush(){ if (saveTimer.current) { clearTimeout(saveTimer.current); persist(dataRef.current); } }
     window.addEventListener("pagehide", flush);
     window.addEventListener("visibilitychange", flush);
-    return () => {
+    return function(){
       window.removeEventListener("pagehide", flush);
       window.removeEventListener("visibilitychange", flush);
       flush();
     };
   }, []);
 
-  const handleChange = (dayKey, idx, value) => {
-    setData(prev => {
-      const dayData = {...(prev[dayKey]||{})};
-      const cell = dayData[idx] || {value:"", history:[]};
-      dayData[idx] = {...cell, value};
-      const next = {...prev, [dayKey]: dayData};
+  useEffect(function(){
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function(){
+        navigator.serviceWorker.register("sw.js").catch(function(){});
+      });
+    }
+  }, []);
+
+  var handleChange = function(dayKey, exId, value){
+    setData(function(prev){
+      var dayData = Object.assign({}, prev[dayKey] || {});
+      var cell = dayData[exId] || {value:"", history:[]};
+      dayData[exId] = Object.assign({}, cell, {value:value});
+      var next = Object.assign({}, prev); next[dayKey] = dayData;
       scheduleSave(next);
       return next;
     });
   };
 
-  const commitEntry = (dayKey, idx) => {
-    setData(prev => {
-      const dayData = {...(prev[dayKey]||{})};
-      const cell = dayData[idx] || {value:"", history:[]};
+  var commitEntry = function(dayKey, exId){
+    setData(function(prev){
+      var dayData = Object.assign({}, prev[dayKey] || {});
+      var cell = dayData[exId] || {value:"", history:[]};
       if (cell.value === "" || cell.value === undefined) return prev;
-      const history = Array.isArray(cell.history) ? [...cell.history] : [];
-      const today = todayLabel();
-      const filtered = history.filter(h => h.date !== today);
+      var history = Array.isArray(cell.history) ? cell.history.slice() : [];
+      var today = todayLabel();
+      var filtered = history.filter(function(hst){ return hst.date !== today; });
       filtered.unshift({date: today, value: cell.value});
-      dayData[idx] = {...cell, history: filtered.slice(0,5), updatedAt: today};
-      const next = {...prev, [dayKey]: dayData};
+      dayData[exId] = Object.assign({}, cell, {history: filtered.slice(0,5), updatedAt: today});
+      var next = Object.assign({}, prev); next[dayKey] = dayData;
       scheduleSave(next);
       return next;
     });
   };
 
-  const currentDay = DAYS.find(d => d.key === activeDay);
+  var saveProfile = function(next){
+    setProfile(next);
+    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(next)); } catch(e) {}
+  };
 
-  return (
-    <div style={{background:PAPER, minHeight:"100vh"}}>
-      <div className="safe-top" style={{background:INK, padding:"22px 20px 0"}}>
-        <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:4}}>
-          <span style={{fontSize:18}}>🏋️</span>
-          <span style={{color:"#fff", fontWeight:800, fontSize:15, letterSpacing:"0.14em"}}>REGISTRO DE CARGAS</span>
-        </div>
-        <div style={{color:"#8D8FA0", fontSize:12, marginBottom:18}}>
-          Treino de hipertrofia · 1,77 m · 62 kg → 75 kg
-        </div>
-        <div style={{display:"flex", gap:10, overflowX:"auto", paddingBottom:16}}>
-          {DAYS.map(d => {
-            const active = d.key === activeDay;
-            return (
-              <button key={d.key} onClick={() => setActiveDay(d.key)}
-                style={{flex:"0 0 auto", display:"flex", flexDirection:"column", alignItems:"center", gap:6,
-                  background:"none", border:"none", cursor:"pointer", padding:0,
-                  opacity: active?1:0.55, transform: active?"translateY(-2px)":"none", transition:"all .18s ease"}}>
-                <div style={{width:46, height:46, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
-                  fontWeight:800, fontSize:17, color: active?INK:"#fff",
-                  background: active?d.color:"transparent", border:`2.5px solid ${d.color}`,
-                  boxShadow: active?`0 0 0 4px ${hexToRgba(d.color,0.18)}`:"none"}}>
-                  D{d.n}
-                </div>
-                <span style={{fontSize:9.5, fontWeight:700, letterSpacing:"0.06em", color: active?d.color:"#6E7080"}}>{d.title}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+  var handleExport = function(){
+    var payload = { exportedAt: new Date().toISOString(), profile: profile, data: data };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "cargas-backup-" + todayLabel().replace(/\//g,"-") + ".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
-      <div style={{background:currentDay.color, padding:"14px 20px"}}>
-        <div style={{color:"rgba(0,0,0,0.55)", fontSize:11, fontWeight:700, letterSpacing:"0.08em"}}>DIA {currentDay.n}</div>
-        <div style={{color:INK, fontSize:20, fontWeight:800, letterSpacing:"-0.01em"}}>
-          {currentDay.title} <span style={{fontWeight:500}}>— {currentDay.subtitle}</span>
-        </div>
-      </div>
+  var handleImportFile = function(e){
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      try {
+        var parsed = JSON.parse(reader.result);
+        if (parsed.data) { setData(parsed.data); persist(parsed.data); }
+        if (parsed.profile) saveProfile(Object.assign({}, DEFAULT_PROFILE, parsed.profile));
+        window.alert("Backup importado com sucesso.");
+      } catch(err) {
+        window.alert("Não consegui ler esse arquivo. Confira se é um backup exportado por este app.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
 
-      <div style={{padding:"16px 14px 100px"}}>
-        <div style={{display:"flex", flexDirection:"column", gap:10}}>
-          {currentDay.exercises.map((ex, idx) => {
-            const cell = (data[currentDay.key]||{})[idx] || {value:"", history:[]};
-            const historyKey = `${currentDay.key}-${idx}`;
-            const isOpen = openHistory === historyKey;
-            return (
-              <div key={idx} style={{background:"#fff", borderRadius:10, border:`1px solid ${LINE}`, overflow:"hidden"}}>
-                <div style={{display:"flex", alignItems:"center", padding:"12px 12px"}}>
-                  <div style={{flex:1, minWidth:0}}>
-                    <div style={{fontWeight: ex.main?700:500, fontSize:13.5, color:INK, display:"flex", alignItems:"center", gap:6}}>
-                      {ex.main && <span style={{color:"#E8A020", fontSize:12}}>★</span>}
-                      <span>{ex.name}</span>
-                    </div>
-                    <div style={{fontSize:11.5, color:MUTED, marginTop:2}}>{ex.reps}</div>
-                  </div>
-                  <div style={{display:"flex", alignItems:"center", gap:6}}>
-                    <input type="number" inputMode="decimal" placeholder="—" value={cell.value||""}
-                      onChange={e => handleChange(currentDay.key, idx, e.target.value)}
-                      onBlur={() => commitEntry(currentDay.key, idx)}
-                      style={{width:58, textAlign:"center", fontSize:15, fontWeight:700, color:INK,
-                        border:`1.5px solid ${cell.value?currentDay.color:LINE}`, borderRadius:7, padding:"7px 4px",
-                        fontVariantNumeric:"tabular-nums"}} />
-                    <span style={{fontSize:11, color:MUTED, fontWeight:600, width:16}}>kg</span>
-                  </div>
-                </div>
-                {(cell.history && cell.history.length>0) || cell.updatedAt ? (
-                  <button onClick={() => setOpenHistory(isOpen?null:historyKey)}
-                    style={{width:"100%", background: isOpen?"#FAFAFB":"transparent", border:"none",
-                      borderTop:`1px solid ${LINE}`, padding:"6px 12px", display:"flex", alignItems:"center",
-                      justifyContent:"space-between", cursor:"pointer"}}>
-                    <span style={{display:"flex", alignItems:"center", gap:5, fontSize:10.5, color:MUTED}}>
-                      🕐 {cell.updatedAt ? `Atualizado em ${cell.updatedAt}` : "Ver histórico"}
-                    </span>
-                    <span style={{color:MUTED, transform: isOpen?"rotate(90deg)":"none", transition:"transform .15s", display:"inline-block"}}>›</span>
-                  </button>
-                ) : null}
-                {isOpen && cell.history && cell.history.length>0 && (
-                  <div style={{padding:"8px 12px 12px", background:"#FAFAFB"}}>
-                    <div style={{display:"flex", flexDirection:"column", gap:4}}>
-                      {cell.history.map((h,i) => (
-                        <div key={i} style={{display:"flex", justifyContent:"space-between", fontSize:11.5, color:"#4A4C55",
-                          padding:"3px 0", borderBottom: i!==cell.history.length-1?`1px dashed ${LINE}`:"none"}}>
-                          <span>{h.date}</span>
-                          <span style={{fontWeight:700, color:INK}}>{h.value} kg</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+  var handleReset = function(){
+    if (!window.confirm("Apagar todos os pesos e históricos salvos neste aparelho? Essa ação não pode ser desfeita.")) return;
+    setData({});
+    try { localStorage.removeItem(DATA_KEY); } catch(e) {}
+    setSaveState("idle");
+  };
 
-        <div style={{marginTop:14, display:"flex", gap:8, alignItems:"flex-start", color:MUTED, fontSize:11, lineHeight:1.5, padding:"0 4px"}}>
-          <span>ℹ️</span>
-          <span>★ marca os exercícios principais. Os pesos são salvos automaticamente neste iPhone enquanto você digita.</span>
-        </div>
-      </div>
+  var currentDay = DAYS.filter(function(d){ return d.key === activeDay; })[0];
 
-      <div className="safe-bottom" style={{position:"fixed", bottom:16, left:"50%",
-        transform:`translateX(-50%) translateY(${saveState==="idle"?20:0}px)`,
-        opacity: saveState==="idle"?0:1, transition:"all .25s ease",
-        background:INK, color:"#fff", padding:"8px 14px", borderRadius:20, fontSize:11.5, fontWeight:600,
-        display:"flex", alignItems:"center", gap:6, boxShadow:"0 4px 14px rgba(0,0,0,.25)", pointerEvents:"none"}}>
-        {saveState==="saving" ? (
-          <><span style={{width:7,height:7,borderRadius:"50%",background:currentDay.color,animation:"pulse 1s infinite"}}/>Salvando…</>
-        ) : (
-          <><span style={{color:currentDay.color}}>✓</span>Salvo neste iPhone</>
-        )}
-      </div>
-    </div>
+  var daysRow = h("div", {className:"safe-top", style:{background:INK, padding:"22px 20px 0"}},
+    h("div", {style:{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4}},
+      h("div", {style:{display:"flex", alignItems:"center", gap:10}},
+        h("span", {style:{fontSize:18}}, "🏋️"),
+        h("span", {style:{color:"#fff", fontWeight:800, fontSize:15, letterSpacing:"0.14em"}}, "REGISTRO DE CARGAS")
+      ),
+      h("button", {
+          onClick: function(){ setEditingProfile(!editingProfile); },
+          "aria-label":"Editar perfil",
+          style:{background:"none", border:"none", color:"#8D8FA0", fontSize:14, cursor:"pointer", padding:4}
+        }, "✎")
+    ),
+    editingProfile
+      ? h("div", {style:{display:"flex", gap:6, marginBottom:14, flexWrap:"wrap"}},
+          h("input", {
+            value: profile.height, "aria-label":"Altura",
+            onChange: function(e){ saveProfile(Object.assign({}, profile, {height:e.target.value})); },
+            style:{flex:"1 1 70px", minWidth:0, background:"#22232B", border:"1px solid #33343D", borderRadius:6, color:"#fff", fontSize:11, padding:"6px 8px"}
+          }),
+          h("input", {
+            value: profile.start, "aria-label":"Peso inicial",
+            onChange: function(e){ saveProfile(Object.assign({}, profile, {start:e.target.value})); },
+            style:{flex:"1 1 70px", minWidth:0, background:"#22232B", border:"1px solid #33343D", borderRadius:6, color:"#fff", fontSize:11, padding:"6px 8px"}
+          }),
+          h("input", {
+            value: profile.goal, "aria-label":"Peso meta",
+            onChange: function(e){ saveProfile(Object.assign({}, profile, {goal:e.target.value})); },
+            style:{flex:"1 1 70px", minWidth:0, background:"#22232B", border:"1px solid #33343D", borderRadius:6, color:"#fff", fontSize:11, padding:"6px 8px"}
+          }),
+          h("button", {
+            onClick: function(){ setEditingProfile(false); },
+            style:{background:currentDay.color, border:"none", borderRadius:6, color:INK, fontWeight:700, fontSize:11, padding:"6px 10px", cursor:"pointer"}
+          }, "OK")
+        )
+      : h("div", {style:{color:"#8D8FA0", fontSize:12, marginBottom:18}},
+          "Treino de hipertrofia · " + profile.height + " · " + profile.start + " → " + profile.goal
+        ),
+    h("div", {style:{display:"flex", gap:10, overflowX:"auto", paddingBottom:16}},
+      DAYS.map(function(d){
+        var active = d.key === activeDay;
+        return h("button", {
+            key: d.key,
+            onClick: function(){ setActiveDay(d.key); setOpenHistory(null); },
+            style:{flex:"0 0 auto", display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+              background:"none", border:"none", cursor:"pointer", padding:0,
+              opacity: active?1:0.55, transform: active?"translateY(-2px)":"none", transition:"all .18s ease"}
+          },
+          h("div", {style:{width:46, height:46, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+              fontWeight:800, fontSize:17, color: active?INK:"#fff",
+              background: active?d.color:"transparent", border:"2.5px solid " + d.color,
+              boxShadow: active?("0 0 0 4px " + hexToRgba(d.color,0.18)):"none"}
+            }, "D" + d.n),
+          h("span", {style:{fontSize:9.5, fontWeight:700, letterSpacing:"0.06em", color: active?d.color:"#6E7080"}}, d.title)
+        );
+      })
+    )
+  );
+
+  var banner = h("div", {style:{background:currentDay.color, padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between"}},
+    h("div", null,
+      h("div", {style:{color:"rgba(0,0,0,0.55)", fontSize:11, fontWeight:700, letterSpacing:"0.08em"}}, "DIA " + currentDay.n),
+      h("div", {style:{color:INK, fontSize:20, fontWeight:800, letterSpacing:"-0.01em"}},
+        currentDay.title, " ", h("span", {style:{fontWeight:500}}, "— " + currentDay.subtitle)
+      )
+    ),
+    h("button", {
+        onClick: function(){ setShowSummary(!showSummary); },
+        style:{background:"rgba(0,0,0,0.14)", border:"none", borderRadius:16, color:INK, fontWeight:700,
+          fontSize:11, padding:"7px 12px", cursor:"pointer"}
+      }, showSummary ? "Registrar" : "Resumo")
+  );
+
+  var toolbar = h("div", {style:{display:"flex", gap:8, padding:"12px 14px 0"}},
+    h("button", {onClick:handleExport, style:toolbarBtnStyle}, "⭳ Exportar"),
+    h("button", {onClick:function(){ fileInputRef.current && fileInputRef.current.click(); }, style:toolbarBtnStyle}, "⭱ Importar"),
+    h("button", {onClick:handleReset, style:Object.assign({}, toolbarBtnStyle, {color:"#D64545", borderColor:"#F2C6C6"})}, "Apagar tudo"),
+    h("input", {ref:fileInputRef, type:"file", accept:"application/json", style:{display:"none"}, onChange:handleImportFile})
+  );
+
+  var list;
+  if (showSummary) {
+    list = h("div", {style:{display:"flex", flexDirection:"column", gap:10}},
+      currentDay.exercises.map(function(ex){
+        var cell = (data[currentDay.key]||{})[ex.id] || {value:"", history:[]};
+        return h("div", {key:ex.id, style:{background:"#fff", borderRadius:10, border:"1px solid " + LINE, padding:"12px"}},
+          h("div", {style:{display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}},
+            h("div", {style:{minWidth:0}},
+              h("div", {style:{fontWeight: ex.main?700:500, fontSize:13, color:INK}}, ex.name),
+              h("div", {style:{fontSize:11, color:MUTED, marginTop:2}},
+                cell.value ? ("Atual: " + cell.value + " kg") : "Sem registro"
+              )
+            ),
+            h(Sparkline, {history:cell.history, color:currentDay.color})
+          )
+        );
+      })
+    );
+  } else {
+    list = h("div", {style:{display:"flex", flexDirection:"column", gap:10}},
+      currentDay.exercises.map(function(ex){
+        var cell = (data[currentDay.key]||{})[ex.id] || {value:"", history:[]};
+        var historyKey = currentDay.key + "-" + ex.id;
+        var isOpen = openHistory === historyKey;
+        var hasHistory = (cell.history && cell.history.length>0) || cell.updatedAt;
+        return h("div", {key:ex.id, style:{background:"#fff", borderRadius:10, border:"1px solid " + LINE, overflow:"hidden"}},
+          h("div", {style:{display:"flex", alignItems:"center", padding:"12px 12px"}},
+            h("div", {style:{flex:1, minWidth:0}},
+              h("div", {style:{fontWeight: ex.main?700:500, fontSize:13.5, color:INK, display:"flex", alignItems:"center", gap:6}},
+                ex.main && h("span", {style:{color:"#E8A020", fontSize:12}}, "★"),
+                h("span", null, ex.name)
+              ),
+              h("div", {style:{fontSize:11.5, color:MUTED, marginTop:2}}, ex.reps)
+            ),
+            h("div", {style:{display:"flex", alignItems:"center", gap:6}},
+              h("input", {
+                type:"number", inputMode:"decimal", step:"0.5", min:"0", placeholder:"—",
+                value: cell.value || "",
+                "aria-label": "Carga em quilos para " + ex.name,
+                onChange: function(e){ handleChange(currentDay.key, ex.id, e.target.value); },
+                onBlur: function(){ commitEntry(currentDay.key, ex.id); },
+                style:{width:58, textAlign:"center", fontSize:15, fontWeight:700, color:INK,
+                  border:"1.5px solid " + (cell.value?currentDay.color:LINE), borderRadius:7, padding:"7px 4px",
+                  fontVariantNumeric:"tabular-nums"}
+              }),
+              h("span", {style:{fontSize:11, color:MUTED, fontWeight:600, width:16}}, "kg")
+            )
+          ),
+          hasHistory ? h("button", {
+              onClick: function(){ setOpenHistory(isOpen ? null : historyKey); },
+              "aria-label": isOpen ? "Fechar histórico" : "Ver histórico",
+              style:{width:"100%", background: isOpen?"#FAFAFB":"transparent", border:"none",
+                borderTop:"1px solid " + LINE, padding:"6px 12px", display:"flex", alignItems:"center",
+                justifyContent:"space-between", cursor:"pointer"}
+            },
+            h("span", {style:{display:"flex", alignItems:"center", gap:5, fontSize:10.5, color:MUTED}},
+              "🕐 " + (cell.updatedAt ? ("Atualizado em " + cell.updatedAt) : "Ver histórico")
+            ),
+            h("span", {style:{color:MUTED, transform: isOpen?"rotate(90deg)":"none", transition:"transform .15s", display:"inline-block"}}, "›")
+          ) : null,
+          (isOpen && cell.history && cell.history.length>0) ? h("div", {style:{padding:"8px 12px 12px", background:"#FAFAFB"}},
+            h("div", {style:{display:"flex", flexDirection:"column", gap:4}},
+              cell.history.map(function(hst, i){
+                return h("div", {key:i, style:{display:"flex", justifyContent:"space-between", fontSize:11.5, color:"#4A4C55",
+                    padding:"3px 0", borderBottom: i!==cell.history.length-1 ? ("1px dashed " + LINE) : "none"}},
+                  h("span", null, hst.date),
+                  h("span", {style:{fontWeight:700, color:INK}}, hst.value + " kg")
+                );
+              })
+            )
+          ) : null
+        );
+      })
+    );
+  }
+
+  var footerNote = h("div", {style:{marginTop:14, display:"flex", gap:8, alignItems:"flex-start", color:MUTED, fontSize:11, lineHeight:1.5, padding:"0 4px"}},
+    h("span", null, "ℹ️"),
+    h("span", null, "★ marca os exercícios principais. Os pesos são salvos automaticamente neste aparelho enquanto você digita.")
+  );
+
+  var saveIndicator = h("div", {className:"safe-bottom", style:{position:"fixed", bottom:16, left:"50%",
+      transform: "translateX(-50%) translateY(" + (saveState==="idle"?20:0) + "px)",
+      opacity: saveState==="idle"?0:1, transition:"all .25s ease",
+      background:INK, color:"#fff", padding:"8px 14px", borderRadius:20, fontSize:11.5, fontWeight:600,
+      display:"flex", alignItems:"center", gap:6, boxShadow:"0 4px 14px rgba(0,0,0,.25)", pointerEvents:"none"}},
+    saveState==="saving"
+      ? h(React.Fragment, null, h("span", {style:{width:7,height:7,borderRadius:"50%",background:currentDay.color,animation:"pulse 1s infinite"}}), "Salvando…")
+      : h(React.Fragment, null, h("span", {style:{color:currentDay.color}}, "✓"), "Salvo neste aparelho")
+  );
+
+  return h("div", {style:{background:PAPER, minHeight:"100vh"}},
+    daysRow,
+    banner,
+    toolbar,
+    h("div", {style:{padding:"16px 14px 100px"}}, list, footerNote),
+    saveIndicator
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<CargaTracker />);
+var toolbarBtnStyle = {
+  flex:1, background:"#fff", border:"1px solid " + LINE, borderRadius:8, color:"#4A4C55",
+  fontSize:11, fontWeight:600, padding:"8px 6px", cursor:"pointer"
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(h(CargaTracker));
 </script>
 </body>
 </html>
