@@ -1,6 +1,6 @@
 {
-  "name": "Registro de Cargas — Treino",
-  "short_name": "Cargas",
+  "name": "Treino",
+  "short_name": "Treino",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#14151A",

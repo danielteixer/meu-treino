@@ -107,6 +107,54 @@ function hexToRgba(hex, alpha){
   return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
 }
 
+// Extrai séries e faixa de repetições de textos como "4x8-10" ou "3x10-12 / perna".
+// Retorna null quando o texto não segue esse padrão (ex.: "3x séries").
+function parseRepsRange(repsStr){
+  if (!repsStr) return null;
+  var m = String(repsStr).match(/(\d+)\s*[x×]\s*(\d+)(?:\s*-\s*(\d+))?/i);
+  if (!m) return null;
+  var sets = parseInt(m[1], 10);
+  var repsMin = parseInt(m[2], 10);
+  var repsMax = m[3] ? parseInt(m[3], 10) : repsMin;
+  if (isNaN(sets) || isNaN(repsMin) || sets <= 0 || repsMin <= 0) return null;
+  return { sets: sets, repsMin: repsMin, repsMax: repsMax, avgReps: (repsMin + repsMax) / 2 };
+}
+
+// Volume total do exercício = séries × repetições médias × carga.
+function calcVolume(weight, repsStr){
+  var w = parseFloat(weight);
+  if (isNaN(w) || w <= 0) return null;
+  var r = parseRepsRange(repsStr);
+  if (!r) return null;
+  return w * r.avgReps * r.sets;
+}
+
+// Estimativa de carga máxima (1RM) pela fórmula de Epley, usando a média da faixa de reps.
+function calcE1RM(weight, repsStr){
+  var w = parseFloat(weight);
+  if (isNaN(w) || w <= 0) return null;
+  var r = parseRepsRange(repsStr);
+  if (!r) return null;
+  return w * (1 + r.avgReps / 30);
+}
+
+function formatKg(n){
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  var rounded = Math.round(n * 10) / 10;
+  return (rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1));
+}
+
+// Encontra o último registro de uma sessão anterior (ignora o valor já lançado hoje),
+// usado para calcular a progressão automática mostrada junto ao campo de peso.
+function getPreviousEntry(cell){
+  if (!cell || !Array.isArray(cell.history)) return null;
+  var today = todayLabel();
+  for (var i = 0; i < cell.history.length; i++) {
+    if (cell.history[i].date !== today) return cell.history[i];
+  }
+  return null;
+}
+
 // Migra dados antigos (chave = índice do exercício) para o formato novo (chave = id estável),
 // caso o usuário já tivesse histórico salvo antes dessa atualização.
 function loadInitialData(){
@@ -172,6 +220,8 @@ function CargaTracker(){
   var draggingIndexState = useState(null); var draggingIndex = draggingIndexState[0], setDraggingIndex = draggingIndexState[1];
   var pendingConfirmState = useState(null); var pendingConfirm = pendingConfirmState[0], setPendingConfirm = pendingConfirmState[1];
   var toastState = useState(null); var toastMsg = toastState[0], setToastMsg = toastState[1];
+  var isOnlineState = useState(function(){ return typeof navigator === "undefined" || navigator.onLine; });
+  var isOnline = isOnlineState[0], setIsOnline = isOnlineState[1];
   var dragIndexRef = useRef(null);
   var saveTimer = useRef(null);
   var dataRef = useRef(data);
@@ -209,6 +259,17 @@ function CargaTracker(){
         navigator.serviceWorker.register("sw.js").catch(function(){});
       });
     }
+  }, []);
+
+  useEffect(function(){
+    function goOnline(){ setIsOnline(true); }
+    function goOffline(){ setIsOnline(false); }
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return function(){
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
   }, []);
 
   useEffect(function(){
@@ -385,6 +446,15 @@ function CargaTracker(){
   var currentDay = daysList.filter(function(d){ return d.key === activeDay; })[0] || daysList[0];
   var currentDayIndex = daysList.indexOf(currentDay);
 
+  var dayVolume = 0, dayLoggedCount = 0;
+  currentDay.exercises.forEach(function(ex){
+    var cell = (data[currentDay.key]||{})[ex.id];
+    if (!cell || !cell.value) return;
+    dayLoggedCount++;
+    var v = calcVolume(cell.value, ex.reps);
+    if (v !== null) dayVolume += v;
+  });
+
   var daysRow = h("div", {style:{background:INK, paddingTop:"calc(22px + env(safe-area-inset-top))", paddingLeft:20, paddingRight:20, paddingBottom:0}},
     h("div", {style:{display:"flex", alignItems:"center", gap:10, marginBottom:18}},
       h("img", {src:"icon-180.png", alt:"", style:{width:28, height:28, borderRadius:8, flexShrink:0}}),
@@ -495,18 +565,48 @@ function CargaTracker(){
     h("button", {onClick:handleReset, style:Object.assign({}, toolbarBtnStyle, {color:"#D64545", borderColor:"#F2C6C6"})}, "Apagar tudo")
   );
 
+  var statsBar = (!editMode && currentDay.exercises.length > 0) ? h("div", {
+      style:{display:"flex", gap:8, padding:"12px 14px 0"}
+    },
+    h("div", {style:{flex:1, background:"#fff", border:"1px solid " + LINE, borderRadius:8,
+        padding:"8px 10px", display:"flex", flexDirection:"column"}},
+      h("span", {style:{fontSize:9.5, color:MUTED, fontWeight:700, letterSpacing:"0.04em"}}, "VOLUME DO DIA"),
+      h("span", {style:{fontSize:15, fontWeight:800, color:INK, marginTop:1}}, formatKg(dayVolume) + " kg")
+    ),
+    h("div", {style:{flex:1, background:"#fff", border:"1px solid " + LINE, borderRadius:8,
+        padding:"8px 10px", display:"flex", flexDirection:"column"}},
+      h("span", {style:{fontSize:9.5, color:MUTED, fontWeight:700, letterSpacing:"0.04em"}}, "REGISTRADOS"),
+      h("span", {style:{fontSize:15, fontWeight:800, color:INK, marginTop:1}}, dayLoggedCount + " / " + currentDay.exercises.length)
+    )
+  ) : null;
+
   var list;
   if (showSummary) {
     list = h("div", {style:{display:"flex", flexDirection:"column", gap:10}},
+      h("div", {style:{background:INK, borderRadius:10, padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center"}},
+        h("span", {style:{color:"#C9CBD6", fontSize:11.5, fontWeight:600}}, "Volume total do dia"),
+        h("span", {style:{color:"#fff", fontSize:17, fontWeight:800}}, formatKg(dayVolume) + " kg")
+      ),
       currentDay.exercises.map(function(ex){
         var cell = (data[currentDay.key]||{})[ex.id] || {value:"", history:[]};
+        var vol = calcVolume(cell.value, ex.reps);
+        var e1rm = calcE1RM(cell.value, ex.reps);
+        var prev = getPreviousEntry(cell);
+        var delta = (prev && cell.value) ? (parseFloat(cell.value) - parseFloat(prev.value)) : null;
         return h("div", {key:ex.id, style:{background:"#fff", borderRadius:10, border:"1px solid " + LINE, padding:"12px"}},
           h("div", {style:{display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}},
             h("div", {style:{minWidth:0}},
               h("div", {style:{fontWeight: ex.main?700:500, fontSize:13, color:INK}}, ex.name),
               h("div", {style:{fontSize:11, color:MUTED, marginTop:2}},
                 cell.value ? ("Atual: " + cell.value + " kg") : "Sem registro"
-              )
+              ),
+              cell.value ? h("div", {style:{fontSize:10.5, color:MUTED, marginTop:2}},
+                "Volume: " + formatKg(vol) + " kg" + (e1rm !== null ? ("  ·  e1RM ~" + formatKg(e1rm) + " kg") : "")
+              ) : null,
+              (delta !== null && !isNaN(delta) && delta !== 0) ? h("div", {
+                  style:{fontSize:10.5, fontWeight:700, marginTop:2, color: delta>0?"#2E9E5B":"#D64545"}
+                }, (delta>0?"▲ +":"▼ ") + formatKg(Math.abs(delta)) + " kg vs. última vez"
+              ) : null
             ),
             h(Sparkline, {history:cell.history, color:currentDay.color})
           )
@@ -520,6 +620,11 @@ function CargaTracker(){
         var historyKey = currentDay.key + "-" + ex.id;
         var isOpen = openHistory === historyKey;
         var hasHistory = (cell.history && cell.history.length>0) || cell.updatedAt;
+        var vol = calcVolume(cell.value, ex.reps);
+        var prevEntry = getPreviousEntry(cell);
+        var delta = (prevEntry && cell.value !== "" && cell.value !== undefined)
+          ? (parseFloat(cell.value) - parseFloat(prevEntry.value)) : null;
+        var hasDelta = delta !== null && !isNaN(delta) && Math.abs(delta) > 0.001;
         return h("div", {key:ex.id, style:{background:"#fff", borderRadius:10, border:"1px solid " + LINE, overflow:"hidden"}},
           h("div", {style:{display:"flex", alignItems:"center", padding:"12px 12px"}},
             h("div", {style:{flex:1, minWidth:0}},
@@ -558,7 +663,14 @@ function CargaTracker(){
                     ex.main && h("span", {style:{color:"#E8A020", fontSize:12}}, "★"),
                     h("span", null, ex.name)
                   ),
-              !editMode && h("div", {style:{fontSize:11.5, color:MUTED, marginTop:2}}, ex.reps)
+              !editMode && h("div", {style:{fontSize:11.5, color:MUTED, marginTop:2}}, ex.reps),
+              (!editMode && cell.value && vol !== null) ? h("div", {style:{fontSize:10.5, color:MUTED, marginTop:2}},
+                "Volume: " + formatKg(vol) + " kg"
+              ) : null,
+              (!editMode && hasDelta) ? h("div", {
+                  style:{fontSize:10.5, fontWeight:700, marginTop:2, color: delta>0?"#2E9E5B":"#D64545"}
+                }, (delta>0?"▲ +":"▼ ") + formatKg(Math.abs(delta)) + " kg vs. última vez"
+              ) : null
             ),
             !editMode && h("div", {style:{display:"flex", alignItems:"center", gap:6}},
               h("input", {
@@ -613,7 +725,7 @@ function CargaTracker(){
 
   var footerNote = h("div", {style:{marginTop:14, display:"flex", gap:8, alignItems:"flex-start", color:MUTED, fontSize:11, lineHeight:1.5, padding:"0 4px"}},
     h("span", null, "ℹ️"),
-    h("span", null, "★ marca os exercícios principais. Os pesos são salvos automaticamente neste aparelho enquanto você digita.")
+    h("span", null, "★ marca os exercícios principais. O volume (séries × reps × carga) e a comparação com a última sessão aparecem automaticamente ao registrar um peso.")
   );
 
   var saveIndicator = h("div", {style:{position:"fixed", bottom:"calc(16px + env(safe-area-inset-bottom))", left:"50%",
@@ -648,15 +760,25 @@ function CargaTracker(){
     )
   ) : null;
 
+  var offlineBanner = !isOnline ? h("div", {
+      style:{background:"#3A3B44", color:"#fff", fontSize:11, fontWeight:600, textAlign:"center",
+        padding:"6px 10px", display:"flex", alignItems:"center", justifyContent:"center", gap:6}
+    },
+    h("span", null, "📴"),
+    h("span", null, "Sem conexão — funcionando offline, seus dados continuam salvos neste aparelho")
+  ) : null;
+
   var toast = toastMsg ? h("div", {style:{position:"fixed", top:"calc(16px + env(safe-area-inset-top))", left:"50%",
       transform:"translateX(-50%)", background:INK, color:"#fff", padding:"9px 16px", borderRadius:20,
       fontSize:12, fontWeight:600, boxShadow:"0 4px 14px rgba(0,0,0,.25)", zIndex:21, maxWidth:"85%", textAlign:"center"}
     }, toastMsg) : null;
 
   return h("div", {style:{background:PAPER, minHeight:"100vh"}},
+    offlineBanner,
     daysRow,
     banner,
     toolbar,
+    statsBar,
     h("div", {style:{padding:"16px 14px 100px"}}, list, footerNote),
     saveIndicator,
     confirmModal,
