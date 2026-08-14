@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
-<title>Cargas — Treino</title>
+<title>Treino</title>
 
 <!-- iOS: faz o link virar um "app" quando adicionado à Tela de Início -->
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Cargas" />
+<meta name="apple-mobile-web-app-title" content="Treino" />
 <link rel="apple-touch-icon" href="icon-180.png" />
 <link rel="icon" href="favicon.png" />
 <link rel="manifest" href="manifest.json" />
@@ -96,8 +96,6 @@ function loadDaysList(){
 
 var DATA_KEY = "cargas-dados-v2";
 var OLD_DATA_KEY = "hipertrofia-pesos-v1";
-var PROFILE_KEY = "cargas-perfil-v2";
-var DEFAULT_PROFILE = { name:"" };
 
 function todayLabel(){
   var d = new Date();
@@ -137,14 +135,6 @@ function loadInitialData(){
   return {};
 }
 
-function loadProfile(){
-  try {
-    var raw = localStorage.getItem(PROFILE_KEY);
-    if (raw) return Object.assign({}, DEFAULT_PROFILE, JSON.parse(raw));
-  } catch(e) {}
-  return DEFAULT_PROFILE;
-}
-
 function Sparkline(props){
   var history = props.history || [];
   if (history.length < 2) {
@@ -174,8 +164,6 @@ function Sparkline(props){
 function CargaTracker(){
   var activeDayState = useState("DIA1"); var activeDay = activeDayState[0], setActiveDay = activeDayState[1];
   var dataState = useState(loadInitialData); var data = dataState[0], setData = dataState[1];
-  var profileState = useState(loadProfile); var profile = profileState[0], setProfile = profileState[1];
-  var editingProfileState = useState(false); var editingProfile = editingProfileState[0], setEditingProfile = editingProfileState[1];
   var saveStateState = useState("idle"); var saveState = saveStateState[0], setSaveState = saveStateState[1];
   var openHistoryState = useState(null); var openHistory = openHistoryState[0], setOpenHistory = openHistoryState[1];
   var showSummaryState = useState(false); var showSummary = showSummaryState[0], setShowSummary = showSummaryState[1];
@@ -382,11 +370,6 @@ function CargaTracker(){
     setDraggingIndex(null);
   };
 
-  var saveProfile = function(next){
-    setProfile(next);
-    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(next)); } catch(e) {}
-  };
-
   var handleReset = function(){
     setPendingConfirm({
       message: "Apagar todos os pesos e históricos salvos neste aparelho? Essa ação não pode ser desfeita.",
@@ -403,34 +386,10 @@ function CargaTracker(){
   var currentDayIndex = daysList.indexOf(currentDay);
 
   var daysRow = h("div", {style:{background:INK, paddingTop:"calc(22px + env(safe-area-inset-top))", paddingLeft:20, paddingRight:20, paddingBottom:0}},
-    h("div", {style:{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4}},
-      h("div", {style:{display:"flex", alignItems:"center", gap:10}},
-        h("span", {style:{fontSize:18}}, "🏋️"),
-        h("span", {style:{color:"#fff", fontWeight:800, fontSize:15, letterSpacing:"0.14em"}}, "REGISTRO DE CARGAS")
-      ),
-      h("button", {
-          onClick: function(){ setEditingProfile(!editingProfile); },
-          "aria-label":"Editar perfil",
-          style:{background:"none", border:"none", color:"#8D8FA0", fontSize:14, cursor:"pointer", padding:4}
-        }, "✎")
+    h("div", {style:{display:"flex", alignItems:"center", gap:10, marginBottom:18}},
+      h("img", {src:"icon-180.png", alt:"", style:{width:28, height:28, borderRadius:8, flexShrink:0}}),
+      h("span", {style:{color:"#fff", fontWeight:800, fontSize:15, letterSpacing:"0.14em"}}, "TREINO")
     ),
-    editingProfile
-      ? h("div", {style:{display:"flex", gap:6, marginBottom:14}},
-          h("input", {
-            value: profile.name, "aria-label":"Seu nome", placeholder:"Digite seu nome",
-            autoFocus: true,
-            onChange: function(e){ saveProfile(Object.assign({}, profile, {name:e.target.value})); },
-            onKeyDown: function(e){ if (e.key === "Enter") setEditingProfile(false); },
-            style:{flex:"1 1 auto", minWidth:0, background:"#22232B", border:"1px solid #33343D", borderRadius:6, color:"#fff", fontSize:12, padding:"7px 10px"}
-          }),
-          h("button", {
-            onClick: function(){ setEditingProfile(false); },
-            style:{background:currentDay.color, border:"none", borderRadius:6, color:INK, fontWeight:700, fontSize:11, padding:"6px 12px", cursor:"pointer"}
-          }, "OK")
-        )
-      : h("div", {style:{color:"#8D8FA0", fontSize:12, marginBottom:18}},
-          profile.name ? ("Treino de hipertrofia · " + profile.name) : "Treino de hipertrofia · toque em ✎ para adicionar seu nome"
-        ),
     h("div", {style:{display:"flex", gap:14, overflowX: editMode?"visible":"auto", overflowY:"visible", padding:"6px 4px 20px"}},
       daysList.map(function(d, i){
         var active = d.key === activeDay;
