@@ -446,6 +446,16 @@ function CargaTracker(){
   var currentDay = daysList.filter(function(d){ return d.key === activeDay; })[0] || daysList[0];
   var currentDayIndex = daysList.indexOf(currentDay);
 
+  var todayStr = todayLabel();
+  var isDayTrainedToday = function(dayKey){
+    var dayData = data[dayKey];
+    if (!dayData) return false;
+    for (var exId in dayData) {
+      if (dayData[exId] && dayData[exId].updatedAt === todayStr) return true;
+    }
+    return false;
+  };
+
   var dayVolume = 0, dayLoggedCount = 0;
   currentDay.exercises.forEach(function(ex){
     var cell = (data[currentDay.key]||{})[ex.id];
@@ -464,6 +474,7 @@ function CargaTracker(){
       daysList.map(function(d, i){
         var active = d.key === activeDay;
         var isDragging = draggingIndex === i;
+        var trainedToday = isDayTrainedToday(d.key);
         return h("div", {
             key: d.key,
             "data-day-index": i,
@@ -481,11 +492,19 @@ function CargaTracker(){
                 background:"none", border:"none", cursor: editMode?"grab":"pointer", padding:0,
                 opacity: active?1:0.55, transform: active?"translateY(-2px)":"none", transition:"all .18s ease"}
             },
-            h("div", {style:{width:46, height:46, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
-                fontWeight:800, fontSize:17, color: active?INK:"#fff",
-                background: active?d.color:"transparent", border:"2.5px solid " + d.color,
-                boxShadow: active?("0 0 0 4px " + hexToRgba(d.color,0.18)):"none"}
-              }, "D" + (i+1)),
+            h("div", {style:{position:"relative", width:46, height:46}},
+              h("div", {style:{width:46, height:46, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+                  fontWeight:800, fontSize:17, color: active?INK:"#fff",
+                  background: active?d.color:"transparent", border:"2.5px solid " + d.color,
+                  boxShadow: active?("0 0 0 4px " + hexToRgba(d.color,0.18)):"none"}
+                }, "D" + (i+1)),
+              trainedToday ? h("div", {
+                  "aria-label": "Treinado hoje",
+                  style:{position:"absolute", top:-3, right:-3, width:16, height:16, borderRadius:"50%",
+                    background:"#2E9E5B", border:"2px solid " + INK, display:"flex", alignItems:"center",
+                    justifyContent:"center", fontSize:9, color:"#fff", fontWeight:800, lineHeight:1}
+                }, "✓") : null
+            ),
             h("span", {style:{fontSize:9.5, fontWeight:700, letterSpacing:"0.06em", color: active?d.color:"#6E7080", maxWidth:56, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}, d.title)
           ),
           editMode ? h("button", {
@@ -532,7 +551,7 @@ function CargaTracker(){
               style:{display:"block", width:"100%", background:"rgba(255,255,255,0.5)", border:"1px solid rgba(0,0,0,0.2)",
                 borderRadius:6, color:INK, fontSize:12.5, fontWeight:500, padding:"5px 8px", marginBottom:8}
             }),
-            h("div", {style:{display:"flex", gap:6, flexWrap:"wrap"}},
+            h("div", {style:{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center"}},
               DAY_COLOR_PALETTE.map(function(c){
                 return h("button", {
                     key:c, onClick: function(){ updateDayField(currentDay.key, "color", c); },
@@ -540,7 +559,24 @@ function CargaTracker(){
                     style:{width:22, height:22, borderRadius:"50%", background:c, cursor:"pointer",
                       border: c===currentDay.color ? "2.5px solid " + INK : "2.5px solid rgba(0,0,0,0.15)"}
                   });
-              })
+              }),
+              h("div", {style:{width:1, height:18, background:"rgba(0,0,0,0.2)", margin:"0 2px"}}),
+              h("label", {
+                  "aria-label":"Escolher cor personalizada",
+                  style:{width:24, height:24, borderRadius:"50%", cursor:"pointer", position:"relative",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    background: DAY_COLOR_PALETTE.indexOf(currentDay.color) === -1
+                      ? currentDay.color
+                      : "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)",
+                    border: DAY_COLOR_PALETTE.indexOf(currentDay.color) === -1 ? "2.5px solid " + INK : "2.5px solid rgba(0,0,0,0.15)"}
+                },
+                h("input", {
+                  type:"color", value: currentDay.color,
+                  onChange: function(e){ updateDayField(currentDay.key, "color", e.target.value); },
+                  style:{position:"absolute", inset:0, width:"100%", height:"100%", opacity:0, cursor:"pointer", border:"none", padding:0}
+                })
+              ),
+              h("span", {style:{fontSize:10, color:"rgba(0,0,0,0.55)", fontWeight:600, marginLeft:2}}, "cor personalizada")
             )
           )
         : h("div", null,
